@@ -80,4 +80,5 @@ export const twoSum: Problem = {
 	starterCode: starterCodeTwoSum,
 	order: 1,
 	starterFunctionName: "function twoSum(",
+	testCases: []
 };

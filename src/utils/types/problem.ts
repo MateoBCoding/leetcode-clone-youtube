@@ -6,6 +6,11 @@ export type Example = {
 	img?: string;
 };
 
+export type testCases = {
+	input: string;
+	output: string;
+};
+
 // local problem data
 export type Problem = {
 	id: string;
@@ -17,6 +22,7 @@ export type Problem = {
 	starterCode: string;
 	handlerFunction: ((fn: any) => boolean) | string;
 	starterFunctionName: string;
+	testCases: testCases[];
 };
 
 export type DBProblem = {

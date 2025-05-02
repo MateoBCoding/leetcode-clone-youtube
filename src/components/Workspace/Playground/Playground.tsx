@@ -9,10 +9,11 @@ import { Problem } from "@/utils/types/problem";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { auth, firestore } from "@/firebase/firebase";
 import { toast } from "react-toastify";
-import { problems } from "@/utils/problems";
 import { useRouter } from "next/router";
 import { arrayUnion, doc, updateDoc } from "firebase/firestore";
 import useLocalStorage from "@/hooks/useLocalStorage";
+import { runJudge0Code } from "@/utils/Runner/judge0Runner";
+
 
 type PlaygroundProps = {
 	problem: Problem;
@@ -53,47 +54,35 @@ const Playground: React.FC<PlaygroundProps> = ({ problem, setSuccess, setSolved 
 			return;
 		}
 		try {
-			userCode = userCode.slice(userCode.indexOf(problem.starterFunctionName));
-			const cb = new Function(`return ${userCode}`)();
-			const handler = problems[pid as string].handlerFunction;
-
-			if (typeof handler === "function") {
-				const success = handler(cb);
-				if (success) {
-					toast.success("Congrats! All tests passed!", {
-						position: "top-center",
-						autoClose: 3000,
-						theme: "dark",
-					});
-					setSuccess(true);
-					setTimeout(() => {
-						setSuccess(false);
-					}, 4000);
-
-					const userRef = doc(firestore, "users", user.uid);
-					await updateDoc(userRef, {
-						solvedProblems: arrayUnion(pid),
-					});
-					setSolved(true);
-				}
+			const results = await runJudge0Code(userCode, 52, problem.testCases); // 52 = Javascript
+			const allPassed = results.every(r => r.status?.description === "Accepted");
+	
+			if (allPassed) {
+				toast.success("Congrats! All test cases passed!", {
+					position: "top-center",
+					autoClose: 3000,
+					theme: "dark",
+				});
+	
+				const userRef = doc(firestore, "users", user.uid);
+				await updateDoc(userRef, {
+					solvedProblems: arrayUnion(pid),
+				});
+				setSolved(true);
+			} else {
+				toast.error("Oops! Some test cases failed", {
+					position: "top-center",
+					autoClose: 3000,
+					theme: "dark",
+				});
 			}
 		} catch (error: any) {
-			console.log(error.message);
-			if (
-				error.message.startsWith("AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:")
-			) {
-				toast.error("Oops! One or more test cases failed", {
-					position: "top-center",
-					autoClose: 3000,
-					theme: "dark",
-				});
-			} else {
-				toast.error(error.message, {
-					position: "top-center",
-					autoClose: 3000,
-					theme: "dark",
-				});
-			}
+			console.error(error);
+			toast.error("Error submitting to Judge0: " + error.message, {
+				position: "top-center",
+				autoClose: 3000,
+				theme: "dark",
+			});
 		}
 	};
 
