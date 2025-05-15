@@ -10,7 +10,6 @@ if (!admin.apps.length) {
 
 const firestore = admin.firestore();
 
-// Define el problema
 const problemData = {
     id: "two-sum",
     title: "1. Two Sum",

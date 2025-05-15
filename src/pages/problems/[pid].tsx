@@ -32,8 +32,6 @@ export async function getStaticPaths() {
         params: { pid: doc.id },
     }));
 
-    console.log("Generated paths:", paths);
-
     return {
         paths,
         fallback: false,

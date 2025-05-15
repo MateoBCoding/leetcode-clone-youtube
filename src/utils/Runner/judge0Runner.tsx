@@ -1,32 +1,73 @@
-export async function runJudge0Code(sourceCode: string, languageId: number, testCases: Array<{ input: string; output: string }>) {
-    const results = [];
+export async function runJudge0Code(
+	sourceCode: string,
+	languageId: number,
+	testCases: Array<{ input: string; output: string }>
+) {
+	const results = [];
 
-    for (const testCase of testCases) {
-        const submission = {
-            language_id: languageId,
-            source_code: btoa(sourceCode), // Base64 encode
-            stdin: btoa(testCase.input),
-            expected_output: btoa(testCase.output),
-        };
+	for (const testCase of testCases) {
+		const submission = {
+			language_id: languageId,
+			source_code: btoa(sourceCode),
+			stdin: btoa(testCase.input),
+			expected_output: btoa(testCase.output),
+		};
 
-        const response = await fetch("https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=true&wait=true&fields=*",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "x-rapidapi-host": "judge0-ce.p.rapidapi.com",
-                    "x-rapidapi-key": "ad097b7ce1msh7a28d1beb5dd162p179b1ejsna1f48b197c4c"
-                },
-                body: JSON.stringify(submission),
-            });
+		const response = await fetch(
+			"https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=true&wait=false",
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-rapidapi-host": "judge0-ce.p.rapidapi.com",
+					"x-rapidapi-key": "ad097b7ce1msh7a28d1beb5dd162p179b1ejsna1f48b197c4c",
+				},
+				body: JSON.stringify(submission),
+			}
+		);
 
-        if (!response.ok) {
-            throw new Error(`Error from Judge0: ${response.statusText}`);
-        }
+		const { token } = await response.json();
 
-        const result = await response.json();
-        results.push(result);
-    }
+		let result;
+		let statusId = 1;
 
-    return results;
+		while (statusId <= 2) {
+			const resultResponse = await fetch(
+				`https://judge0-ce.p.rapidapi.com/submissions/${token}?base64_encoded=true`,
+				{
+					method: "GET",
+					headers: {
+						"x-rapidapi-host": "judge0-ce.p.rapidapi.com",
+						"x-rapidapi-key": "ad097b7ce1msh7a28d1beb5dd162p179b1ejsna1f48b197c4c",
+					},
+				}
+			);
+			result = await resultResponse.json();
+			statusId = result.status.id;
+			if (statusId <= 2) {
+				await new Promise((resolve) => setTimeout(resolve, 1500));
+			}
+		}
+
+		results.push({
+			...result,
+			decoded: {
+				stdout: decodeBase64Utf8(result.stdout),
+				stderr: decodeBase64Utf8(result.stderr),
+				compile_output: decodeBase64Utf8(result.compile_output),
+			},
+		});
+	}
+
+	return results;
+}
+
+function decodeBase64Utf8(base64: string | null): string {
+	if (!base64) return "";
+	const binaryString = atob(base64);
+	const bytes = new Uint8Array(binaryString.length);
+	for (let i = 0; i < binaryString.length; i++) {
+		bytes[i] = binaryString.charCodeAt(i);
+	}
+	return new TextDecoder("utf-8").decode(bytes);
 }

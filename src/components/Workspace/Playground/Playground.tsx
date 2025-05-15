@@ -30,6 +30,7 @@ export interface ISettings {
 const Playground: React.FC<PlaygroundProps> = ({ problem, setSuccess, setSolved }) => {
 	const [activeTestCaseId, setActiveTestCaseId] = useState<number>(0);
 	let [userCode, setUserCode] = useState<string>(problem.starterCode);
+	const [consoleOutput, setConsoleOutput] = useState("");
 
 	const [fontSize, setFontSize] = useLocalStorage("lcc-fontSize", "16px");
 
@@ -40,51 +41,66 @@ const Playground: React.FC<PlaygroundProps> = ({ problem, setSuccess, setSolved 
 	});
 
 	const [user] = useAuthState(auth);
-	const {
-		query: { pid },
-	} = useRouter();
+	const { query: { pid },} = useRouter();
 
 	const handleSubmit = async () => {
-		if (!user) {
-			toast.error("Please login to submit your code", {
-				position: "top-center",
-				autoClose: 3000,
-				theme: "dark",
-			});
-			return;
-		}
-		try {
-			const results = await runJudge0Code(userCode, 52, problem.testCases); // 52 = Javascript
-			const allPassed = results.every(r => r.status?.description === "Accepted");
-	
-			if (allPassed) {
-				toast.success("Congrats! All test cases passed!", {
-					position: "top-center",
-					autoClose: 3000,
-					theme: "dark",
-				});
-	
-				const userRef = doc(firestore, "users", user.uid);
-				await updateDoc(userRef, {
-					solvedProblems: arrayUnion(pid),
-				});
-				setSolved(true);
-			} else {
-				toast.error("Oops! Some test cases failed", {
-					position: "top-center",
-					autoClose: 3000,
-					theme: "dark",
-				});
+	if (!user) {
+		toast.error("Please login to submit your code", {
+			position: "top-center",
+			autoClose: 3000,
+			theme: "dark",
+		});
+		return;
+	}
+
+	try {
+		const testCases = problem.examples.map((example) => {
+			const input = extractStdin(example.inputText);
+			return {
+				input,
+				output: example.outputText.trim(),
+			};
+		});
+
+		const results = await runJudge0Code(userCode, 63, testCases);
+
+		let allPassed = true;
+		let outputMsg = "";
+
+		results.forEach((res, i) => {
+			const expected = testCases[i].output;
+			const actual = res.decoded.stdout.trim();
+			const status = res.status.description;
+
+			outputMsg += `\nTest Case ${i + 1}:\nExpected: ${expected}\nReceived: ${actual}\nStatus: ${status}\n---\n`;
+
+			if (expected !== actual || status !== "Accepted") {
+				allPassed = false;
 			}
-		} catch (error: any) {
-			console.error(error);
-			toast.error("Error submitting to Judge0: " + error.message, {
-				position: "top-center",
-				autoClose: 3000,
-				theme: "dark",
-			});
+		});
+
+		setConsoleOutput(outputMsg);
+
+		if (allPassed) {
+			toast.success("✅ All test cases passed!", { position: "top-center", autoClose: 3000 , theme: "dark",});
+			const userRef = doc(firestore, "users", user.uid);
+			await updateDoc(userRef, { solvedProblems: arrayUnion(pid) });
+			setSolved(true);
+			setSuccess(true);
+		} else {
+			toast.error("❌ Some test cases failed", { position: "top-center", autoClose: 3000 });
+			setSuccess(false);
 		}
-	};
+	} catch (err: any) {
+		console.error(err);
+		toast.error("Submission error: " + err.message, {
+			position: "top-center",
+			autoClose: 3000,
+			theme: "dark",
+		});
+	}
+};
+
 
 	useEffect(() => {
 		const code = localStorage.getItem(`code-${pid}`);
@@ -155,8 +171,28 @@ const Playground: React.FC<PlaygroundProps> = ({ problem, setSuccess, setSolved 
 					</div>
 				</div>
 			</Split>
-			<EditorFooter handleSubmit={handleSubmit} />
-		</div>
+			<EditorFooter handleSubmit={handleSubmit} consoleOutput={consoleOutput} />		</div>
 	);
 };
 export default Playground;
+
+function decodeBase64Utf8(base64: string | null): string {
+    if (!base64) return "";
+    const binaryString = atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    const decoder = new TextDecoder("utf-8");
+    return decoder.decode(bytes);
+}
+
+function extractStdin(inputText: string): string {
+	const numsMatch = inputText.match(/nums\s*=\s*(\[[^\]]+\])/);
+	const targetMatch = inputText.match(/target\s*=\s*([0-9]+)/);
+
+	const nums = numsMatch ? numsMatch[1] : "[]";
+	const target = targetMatch ? targetMatch[1] : "0";
+
+	return `${nums}\n${target}`;
+}
