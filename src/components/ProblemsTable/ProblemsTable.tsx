@@ -17,11 +17,8 @@ const ProblemsTable: React.FC<ProblemsTableProps> = ({
       <tbody className='text-white'>
         {problems.map((problem, idx) => {
           const difficultyColor =
-            problem.difficulty === "Easy"
-              ? "text-dark-green-s"
-              : problem.difficulty === "Medium"
-              ? "text-dark-yellow"
-              : "text-dark-pink";
+            problem.difficulty === "Easy" ? "text-dark-green-s": 
+            problem.difficulty === "Medium"? "text-dark-yellow" : "text-dark-pink";
           return (
             <tr className={`${idx % 2 == 1 ? "bg-dark-layer-1" : ""}`} key={problem.id}>
               <th className='px-2 py-4 font-medium whitespace-nowrap text-dark-green-s'>
