@@ -49,13 +49,17 @@ export async function runJudge0Code(
 			}
 		}
 
+		const decoded = {
+			stdout: decodeBase64Utf8(result.stdout),
+			stderr: decodeBase64Utf8(result.stderr),
+			compile_output: decodeBase64Utf8(result.compile_output),
+			message: decodeBase64Utf8(result.message),
+		};
+
 		results.push({
 			...result,
-			decoded: {
-				stdout: decodeBase64Utf8(result.stdout),
-				stderr: decodeBase64Utf8(result.stderr),
-				compile_output: decodeBase64Utf8(result.compile_output),
-			},
+			decoded,
+			passed: result.status.id === 3 && decoded.stderr === "" && decoded.compile_output === "",
 		});
 	}
 
