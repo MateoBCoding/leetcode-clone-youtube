@@ -6,6 +6,9 @@ import { DBProblem } from "@/utils/types/problem";
 import { collection, getDocs, orderBy, query, doc } from "firebase/firestore";
 import { firestore, auth } from "@/firebase/firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
+import { useRouter } from "next/router";
+
+
 
 interface Day {
   day: number;
@@ -26,6 +29,7 @@ export default function Home() {
   const [course, setCourse] = useState<Course | null>(null);
   const hasMounted = useHasMounted();
   const [user] = useAuthState(auth);
+  const router = useRouter();
 
   useEffect(() => {
     const fetchProblems = async () => {
@@ -48,6 +52,9 @@ export default function Home() {
         }
       }
     };
+
+
+    
 
     const fetchCourse = async () => {
       const courseDocs = await getDocs(collection(firestore, "courses"));
@@ -110,6 +117,16 @@ export default function Home() {
           );
         })}
       </div>
+      {/* boton profesor */}
+        <div className="flex justify-center mt-4">
+          <button
+              onClick={() => router.push("/teacherview")}
+              className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition"
+          >
+         Ir a vista del profesor
+           </button>
+        </div>
+
 
       {/* Tabla */}
       {selectedDay && isDayUnlocked(selectedDay - 1) && (
