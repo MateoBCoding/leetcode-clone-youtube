@@ -10,10 +10,11 @@ import { useAuthState } from "react-firebase-hooks/auth";
 import { auth, firestore } from "@/firebase/firebase";
 import { toast } from "react-toastify";
 import { useRouter } from "next/router";
-import { arrayUnion, doc, updateDoc } from "firebase/firestore";
 import useLocalStorage from "@/hooks/useLocalStorage";
 import { runJudge0Code } from "@/utils/Runner/judge0Runner";
-import { CheckCircle, XCircle } from "lucide-react"; // 👈 iconos
+import { CheckCircle, XCircle } from "lucide-react";
+import { doc, getDoc, setDoc, updateDoc, increment, arrayUnion } from "firebase/firestore";
+
 
 type PlaygroundProps = {
   problem: Problem;
@@ -42,7 +43,7 @@ const Playground: React.FC<PlaygroundProps> = ({
     settingsModalIsOpen: false,
     dropdownIsOpen: false,
   });
-
+  const [entryTime, setEntryTime] = useState<number>(Date.now());
   const [user] = useAuthState(auth);
   const {
     query: { pid },
@@ -78,8 +79,7 @@ const Playground: React.FC<PlaygroundProps> = ({
       results.forEach((res, i) => {
         const expected = testCases[i].output;
         const actual = res.decoded.stdout.trim();
-        const passed =
-          expected === actual && res.status.description === "Accepted";
+        const passed = expected === actual && res.status.description === "Accepted";
 
         newStatus.push(passed ? "success" : "error");
         if (!passed) allPassed = false;
@@ -87,25 +87,37 @@ const Playground: React.FC<PlaygroundProps> = ({
         outputMsg += `\nTest Case ${i + 1}:\nExpected: ${expected}\nReceived: ${actual}\nStatus: ${res.status.description}\n---\n`;
       });
 
-      setTestCaseResults(newStatus); // 🔄 actualiza colores/iconos
+      setTestCaseResults(newStatus);
       setConsoleOutput(outputMsg);
 
       if (allPassed) {
-		toast.success("✅ All test cases passed!", {
-			position: "top-center",
-			autoClose: 3000,
-			theme: "dark",
-		});
-		
-		const userRef = doc(firestore, "users", user.uid);
-		await updateDoc(userRef, { solvedProblems: arrayUnion(pid) });
-		setSolved(true);
-		setSuccess(true);
+        const submissionTime = Date.now();
+        const durationInSeconds = Math.floor((submissionTime - entryTime) / 1000);
 
-	// 🔁 Redirige al index luego de unos milisegundos
-	setTimeout(() => {
-		router.push("/");
-	}, 3200); // un poco más que el autoClose del toast
+        const statId = `${user.uid}_${pid}`;
+        const statRef = doc(firestore, "user_problem_stats", statId);
+
+        await updateDoc(statRef, {
+          executionCount: increment(1),
+          totalExecutionTime: increment(durationInSeconds),
+          lastExecutionTime: durationInSeconds,
+          lastSubmittedAt: submissionTime,
+          success: true,
+        });
+
+        toast.success("✅ All test cases passed!", {
+          position: "top-center",
+          autoClose: 3000,
+          theme: "dark",
+        });
+        const userRef = doc(firestore, "users", user.uid);
+        await updateDoc(userRef, { solvedProblems: arrayUnion(pid) });
+        setSolved(true);
+        setSuccess(true);
+        setTimeout(() => {
+          router.push("/");
+        }, 3200);
+      
       } else {
         toast.error("❌ Some test cases failed", {
           position: "top-center",
@@ -113,6 +125,14 @@ const Playground: React.FC<PlaygroundProps> = ({
           theme: "dark",
         });
         setSuccess(false);
+        const statId = `${user.uid}_${pid}`;
+        const statRef = doc(firestore, "user_problem_stats", statId);
+
+        await updateDoc(statRef, {
+          executionCount: increment(1),
+          success: false,
+          lastSubmittedAt: Date.now()
+        });
       }
     } catch (err: any) {
       console.error(err);
@@ -122,7 +142,7 @@ const Playground: React.FC<PlaygroundProps> = ({
         theme: "dark",
       });
     }
-  };
+    };
 
   useEffect(() => {
     const code = localStorage.getItem(`code-${pid}`);
@@ -138,6 +158,24 @@ const Playground: React.FC<PlaygroundProps> = ({
     localStorage.setItem(`code-${pid}`, JSON.stringify(value));
   };
 
+  if (user && pid) {
+  const statId = `${user.uid}_${pid}`;
+  const statRef = doc(firestore, "user_problem_stats", statId);
+
+  getDoc(statRef).then((docSnap) => {
+    if (!docSnap.exists()) {
+      setDoc(statRef, {
+        userId: user.uid,
+        problemId: pid,
+        executionCount: 0,
+        totalExecutionTime: 0,
+        lastExecutionTime: 0,
+        lastSubmittedAt: null,
+        success: false,
+      });
+    }
+  });
+}
   return (
     <div className="flex flex-col bg-dark-layer-1 relative overflow-x-hidden">
       <PreferenceNav settings={settings} setSettings={setSettings} />
@@ -161,7 +199,6 @@ const Playground: React.FC<PlaygroundProps> = ({
 
         {/* ─────────── Consola + Testcases ─────────── */}
         <div className="w-full px-5 overflow-auto">
-          {/* encabezado tabs */}
           <div className="flex h-10 items-center space-x-6">
             <div className="relative flex h-full flex-col justify-center cursor-pointer">
               <div className="text-sm font-medium leading-5 text-white">
