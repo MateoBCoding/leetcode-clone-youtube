@@ -3,10 +3,11 @@ import Topbar from "@/components/Topbar/Topbar";
 import useHasMounted from "@/hooks/useHasMounted";
 import { useEffect, useState } from "react";
 import { DBProblem } from "@/utils/types/problem";
-import { collection, getDocs, orderBy, query, doc } from "firebase/firestore";
+import { collection, getDocs, orderBy, query, doc, getDoc} from "firebase/firestore";
 import { firestore, auth } from "@/firebase/firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { useRouter } from "next/router";
+
 
 
 
@@ -43,12 +44,14 @@ export default function Home() {
       setLoadingProblems(false);
     };
 
+
     const fetchSolvedProblems = async () => {
       if (user) {
-        const userDoc = await getDocs(collection(firestore, "users"));
-        const userData = userDoc.docs.find((doc) => doc.id === user.uid);
-        if (userData) {
-          setSolvedProblems(userData.data().solvedProblems || []);
+        const userRef = doc(firestore, "users", user.uid);
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists()) {
+          setSolvedProblems(userSnap.data().solvedProblems || []);
         }
       }
     };
