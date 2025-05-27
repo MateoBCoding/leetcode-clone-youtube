@@ -20,8 +20,9 @@ interface Stat {
 export const StudentDrawer: React.FC<Props> = ({ name, day, progress }) => {
   const [stats, setStats] = useState<Stat[]>([]);
 
-  useEffect(() => {
-    const fetchStats = async () => {
+ useEffect(() => {
+  const fetchStats = async () => {
+    try {
       const usersRef = collection(firestore, 'user_problem_stats');
       const q = query(usersRef, where('userId', '==', name)); // name debe ser uid
       const querySnapshot = await getDocs(q);
@@ -33,10 +34,13 @@ export const StudentDrawer: React.FC<Props> = ({ name, day, progress }) => {
       });
 
       setStats(statList);
-    };
+    } catch (error) {
+      console.error("Error al obtener stats para el usuario:", name, error);
+    }
+  };
 
-    fetchStats();
-  }, [name]);
+  fetchStats();
+}, [name]);
 
   const filtered = day
     ? [{ day, status: progress[parseInt(day.slice(1)) - 1] }]
