@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { FaCheck, FaTimes } from 'react-icons/fa';
+import { FaCheck, FaTimes, FaSignOutAlt, FaUserCircle } from 'react-icons/fa';
 import { StudentDrawer } from '../pages/studentdrawer';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { firestore } from '@/firebase/firebase';
+import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
+import { firestore, auth } from '@/firebase/firebase';
 import { getDayIndexFromProblemId } from './studentdrawer';
+import { useRouter } from 'next/router';
+import { signOut } from "firebase/auth";
+import { useAuthState } from 'react-firebase-hooks/auth';
 
 const days = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6'];
 type Metric = 'completion' | 'attempts' | 'time' | null;
@@ -15,6 +18,25 @@ function TeacherView() {
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<Metric>(null);
 
+  const router = useRouter();
+  const [user, loading] = useAuthState(auth);
+
+  useEffect(() => {
+    const checkAccess = async () => {
+      if (!user) return router.push('/auth');
+
+      const userRef = doc(firestore, 'users', user.uid);
+      const userSnap = await getDoc(userRef);
+      const role = userSnap.data()?.role?.toLowerCase();
+
+      if (role !== 'profesor') {
+        router.push('/home');
+      }
+    };
+
+    if (!loading) checkAccess();
+  }, [user, loading, router]);
+
   useEffect(() => {
     const fetchStudents = async () => {
       try {
@@ -24,7 +46,7 @@ function TeacherView() {
         for (const doc of usersSnapshot.docs) {
           const data = doc.data();
           const role = data.role?.toLowerCase();
-          if (role === 'admin' || role === 'profesor') continue;
+          if (role !== 'estudiante') continue;
 
           const userId = doc.id;
           const name = data.name || data.displayName || 'Sin nombre';
@@ -85,7 +107,16 @@ function TeacherView() {
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-semibold">Cursos</h2>
             <h1 className="text-2xl font-bold text-center flex-1">Seguimiento de Progreso Estudiantil</h1>
-            <button className="border border-white text-white px-4 py-2 rounded hover:bg-green-700">Filtros</button>
+            <div className="flex items-center gap-4">
+              <FaUserCircle className="text-3xl text-white" />
+              <button
+                onClick={() => signOut(auth)}
+                className="text-white hover:text-gray-300 transition"
+                title="Cerrar sesión"
+              >
+                <FaSignOutAlt className="text-2xl" />
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-3 gap-4">
@@ -109,22 +140,23 @@ function TeacherView() {
             </button>
           </div>
         </div>
-          {/* Botones de filtro por día */}
-          <div className="px-6 py-4 bg-[#1e1e1e]">
-            <div className="flex items-center gap-2 overflow-x-auto mb-4">
-              {expandedDays.map((day, index) => (
-                <button
-                  key={index}
-                  onClick={() => setSelectedDayFilter(day === selectedDayFilter ? null : day)}
-                  className={`border px-4 py-2 rounded hover:bg-green-700 ${
-                    selectedDayFilter === day ? 'bg-white text-green-600 font-bold' : 'border-white text-white'
-                  }`}
-                >
-                  {day}
-                </button>
-              ))}
-            </div>
+
+        {/* Botones de filtro por día */}
+        <div className="px-6 py-4 bg-[#1e1e1e]">
+          <div className="flex items-center gap-2 overflow-x-auto mb-4">
+            {expandedDays.map((day, index) => (
+              <button
+                key={index}
+                onClick={() => setSelectedDayFilter(day === selectedDayFilter ? null : day)}
+                className={`border px-4 py-2 rounded hover:bg-green-700 ${
+                  selectedDayFilter === day ? 'bg-white text-green-600 font-bold' : 'border-white text-white'
+                }`}
+              >
+                {day}
+              </button>
+            ))}
           </div>
+        </div>
 
         {/* Encabezado */}
         <div className="grid grid-cols-[200px_repeat(auto-fill,minmax(60px,1fr))] border border-white">

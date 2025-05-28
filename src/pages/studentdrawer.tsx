@@ -61,25 +61,25 @@ export const StudentDrawer: React.FC<Props> = ({ name, uid, day, progress, onClo
 
       <h2 className="font-bold mb-4 text-lg pt-2 pr-6">Métricas de {name}</h2>
 
-      <ul className="text-sm list-disc list-inside space-y-3">
+      <ul className="text-sm list-disc list-inside space-y-4">
         {filtered.map((entry) => {
-          const stat = stats.find(
-            (s) =>
-              s.problemId &&
-              entry.day.includes((getDayIndexFromProblemId(s.problemId) + 1).toString())
-          );
+          const dayIndex = parseInt(entry.day.slice(1)) - 1;
+          const statsForDay = stats.filter((s) => getDayIndexFromProblemId(s.problemId) === dayIndex);
 
           return (
             <li key={entry.day}>
               <span className="font-semibold">{entry.day}</span>: {entry.status || 'Sin actividad'}
               <ul className="ml-4 list-disc text-xs mt-1 text-gray-300">
-                {stat ? (
-                  <>
-                    <li>Ejecuciones: {stat.executionCount}</li>
-                    <li>Tiempo último intento: {stat.lastExecutionTime}s</li>
-                    <li>Tiempo total: {stat.totalExecutionTime}s</li>
-                    <li>Éxito: {stat.success ? 'Sí' : 'No'}</li>
-                  </>
+                {statsForDay.length > 0 ? (
+                  statsForDay.map((stat) => (
+                    <li key={stat.problemId} className="mb-2">
+                      <div><span className="text-white">Ejercicio:</span> {stat.problemId}</div>
+                      <div><span className="text-white">Ejecuciones:</span> {stat.executionCount}</div>
+                      <div><span className="text-white">Tiempo último intento:</span> {stat.lastExecutionTime}s</div>
+                      <div><span className="text-white">Tiempo total:</span> {stat.totalExecutionTime}s</div>
+                      <div><span className="text-white">Éxito:</span> {stat.success ? 'Sí' : 'No'}</div>
+                    </li>
+                  ))
                 ) : (
                   <li className="text-gray-500">Sin estadísticas</li>
                 )}
@@ -100,6 +100,7 @@ export const getDayIndexFromProblemId = (pid: string): number => {
     'valid-parentheses': 3,
     'merge-sorted-array': 4,
     'palindrome-number': 5,
+    'max-subarray': 3,
   };
 
   return dayProblemMap[pid] ?? -1;
