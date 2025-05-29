@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { FaCheck, FaTimes, FaSignOutAlt, FaUserCircle } from 'react-icons/fa';
+import React, { useState, useEffect, useRef } from 'react';
+import { FaCheck, FaTimes, FaSignOutAlt, FaUserCircle, FaCopy } from 'react-icons/fa';
 import { StudentDrawer } from '../pages/studentdrawer';
 import {
   collection,
@@ -12,15 +12,18 @@ import {
   updateDoc,
   arrayUnion,
 } from 'firebase/firestore';
-import { firestore, auth } from '@/firebase/firebase';
 import { useRouter } from 'next/router';
-import {
-  signOut,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-} from 'firebase/auth';
 import { useAuthState } from 'react-firebase-hooks/auth';
+import { signOut, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getAuth as getAuthSecondary } from 'firebase/auth';
+import { initializeApp, getApps } from 'firebase/app';
+import { firestore, auth, firebaseConfig } from '@/firebase/firebase';
 import { getDayIndexFromProblemId } from './studentdrawer';
+
+// App secundaria para crear usuarios sin cerrar sesión principal
+const secondaryApp = getApps().find(app => app.name === 'Secondary')
+  || initializeApp(firebaseConfig, 'Secondary');
+const secondaryAuth = getAuthSecondary(secondaryApp);
 
 const days = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6'];
 type Metric = 'completion' | 'attempts' | 'time' | null;
@@ -37,7 +40,9 @@ function TeacherView() {
 
   const router = useRouter();
   const [user, loading] = useAuthState(auth);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
+  // Control de acceso del profesor
   useEffect(() => {
     const checkAccess = async () => {
       if (!user) return router.push('/auth');
@@ -49,6 +54,7 @@ function TeacherView() {
     if (!loading) checkAccess();
   }, [user, loading, router]);
 
+  // Carga de estudiantes y estadísticas
   useEffect(() => {
     const fetchStudents = async () => {
       try {
@@ -71,7 +77,8 @@ function TeacherView() {
             query(collection(firestore, 'user_problem_stats'), where('userId', '==', userId))
           );
 
-          statsSnapshot.docs.map(doc => doc.data()).forEach((stat: any) => {
+          statsSnapshot.docs.forEach((doc) => {
+            const stat = doc.data();
             const dayIndex = getDayIndexFromProblemId(stat.problemId);
             if (dayIndex !== -1) {
               if (stat.success) {
@@ -104,45 +111,30 @@ function TeacherView() {
         console.error('Error cargando estudiantes:', error);
       }
     };
-
     fetchStudents();
   }, [generatedPassword]);
 
-  const toggleMetric = (metric: Metric) => {
-    setSelectedMetric(prev => (prev === metric ? null : metric));
-  };
+  // Cuando se abre el modal, enfocamos el input si no estamos en un iframe
+  useEffect(() => {
+    if (showModal && window.self === window.top) {
+      nameInputRef.current?.focus();
+    }
+  }, [showModal]);
 
-  const generatePassword = (): string => {
-    return Math.random().toString(36).slice(-8);
-  };
+  const toggleMetric = (metric: Metric) => setSelectedMetric(prev => prev === metric ? null : metric);
+  const generatePassword = () => Math.random().toString(36).slice(-8);
 
   const registerStudent = async () => {
     if (!formData.name || !formData.email || !formData.documentId) {
       alert('Todos los campos son obligatorios');
       return;
     }
-
     const password = generatePassword();
-    const currentUser = auth.currentUser;
-
     try {
-      const methodsCheck = await fetch(
-        `https://identitytoolkit.googleapis.com/v1/accounts:createAuthUri?key=${process.env.NEXT_PUBLIC_FIREBASE_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: formData.email, continueUri: 'http://localhost' }),
-        }
-      );
-      const result = await methodsCheck.json();
-      if (result.registered) {
-        alert('Ya existe una cuenta con ese correo.');
-        return;
-      }
-
-      const userCred = await createUserWithEmailAndPassword(auth, formData.email, password);
+      // Crear cuenta en Auth sin cerrar sesión principal
+      const userCred = await createUserWithEmailAndPassword(secondaryAuth, formData.email, password);
       const studentUID = userCred.user.uid;
-
+      // Guardar datos del estudiante en Firestore
       await setDoc(doc(firestore, 'users', studentUID), {
         uid: studentUID,
         email: formData.email,
@@ -157,17 +149,11 @@ function TeacherView() {
         dislikedProblems: [],
         starredProblems: [],
       });
-
+      // Agregar estudiante al array del profesor
       await updateDoc(doc(firestore, 'users', user!.uid), {
         students: arrayUnion(studentUID),
       });
-
-      await signInWithEmailAndPassword(
-        auth,
-        currentUser!.email!,
-        localStorage.getItem('profesorPassword')!
-      );
-
+      // Mostrar contraseña y cerrar modal
       setGeneratedPassword(password);
       setShowModal(false);
       setFormData({ name: '', email: '', documentId: '' });
@@ -181,216 +167,76 @@ function TeacherView() {
   return (
     <div className="flex h-screen overflow-hidden bg-[#1e1e1e] text-white">
       <div className="flex-1 overflow-y-auto">
+        {/* Topbar y botones de acción */}
         <div className="bg-green-600 px-6 py-6">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-semibold">Cursos</h2>
             <h1 className="text-2xl font-bold text-center flex-1">Seguimiento de Progreso Estudiantil</h1>
             <div className="flex items-center gap-4">
-              <button
-                onClick={() => setShowModal(true)}
-                className="px-3 py-1 bg-white text-green-700 rounded font-semibold"
-              >
-                + Registrar Estudiante
-              </button>
+              <button onClick={() => setShowModal(true)} className="px-3 py-1 bg-white text-green-700 rounded font-semibold">+ Registrar Estudiante</button>
               <FaUserCircle className="text-3xl text-white" />
-              <button
-                onClick={() => signOut(auth)}
-                className="text-white hover:text-gray-300 transition"
-                title="Cerrar sesión"
-              >
-                <FaSignOutAlt className="text-2xl" />
-              </button>
+              <button onClick={() => signOut(auth)} className="text-white hover:text-gray-300 transition" title="Cerrar sesión"><FaSignOutAlt className="text-2xl" /></button>
             </div>
           </div>
-
           <div className="grid grid-cols-3 gap-4">
-            <button
-              className={`border p-4 text-center font-medium ${
-                selectedMetric === 'completion' ? 'bg-white text-green-600 font-bold' : ''
-              }`}
-              onClick={() => toggleMetric('completion')}
-            >
-              📊 % de estudiantes completo
-            </button>
-            <button
-              className={`border p-4 text-center font-medium ${
-                selectedMetric === 'attempts' ? 'bg-white text-green-600 font-bold' : ''
-              }`}
-              onClick={() => toggleMetric('attempts')}
-            >
-              🔁 Promedio de intentos
-            </button>
-            <button
-              className={`border p-4 text-center font-medium ${
-                selectedMetric === 'time' ? 'bg-white text-green-600 font-bold' : ''
-              }`}
-              onClick={() => toggleMetric('time')}
-            >
-              ⏱️ Tiempo promedio
-            </button>
+            <button className={`border p-4 text-center font-medium ${selectedMetric === 'completion' ? 'bg-white text-green-600 font-bold' : ''}`} onClick={() => toggleMetric('completion')}>📊 % de estudiantes completo</button>
+            <button className={`border p-4 text-center font-medium ${selectedMetric === 'attempts' ? 'bg-white text-green-600 font-bold' : ''}`} onClick={() => toggleMetric('attempts')}>🔁 Promedio de intentos</button>
+            <button className={`border p-4 text-center font-medium ${selectedMetric === 'time' ? 'bg-white text-green-600 font-bold' : ''}`} onClick={() => toggleMetric('time')}>⏱️ Tiempo promedio</button>
           </div>
         </div>
-
+        {/* Filtros de días */}
         <div className="px-6 py-4 bg-[#1e1e1e]">
           <div className="flex items-center gap-2 overflow-x-auto mb-4">
-            {expandedDays.map((day, index) => (
-              <button
-                key={index}
-                onClick={() =>
-                  setSelectedDayFilter(day === selectedDayFilter ? null : day)
-                }
-                className={`border px-4 py-2 rounded hover:bg-green-700 ${
-                  selectedDayFilter === day
-                    ? 'bg-white text-green-600 font-bold'
-                    : 'border-white text-white'
-                }`}
-              >
-                {day}
-              </button>
+            {expandedDays.map((day, idx) => (
+              <button key={idx} onClick={() => setSelectedDayFilter(day === selectedDayFilter ? null : day)} className={`border px-4 py-2 rounded hover:bg-green-700 ${selectedDayFilter === day ? 'bg-white text-green-600 font-bold' : 'border-white text-white'}`}>{day}</button>
             ))}
           </div>
         </div>
-
+        {/* Tabla de estudiantes */}
         <div className="grid grid-cols-[200px_repeat(auto-fill,minmax(60px,1fr))] border border-white">
           <div className="p-2 font-bold border border-white bg-[#2a2a2a]">Nombre</div>
-          {selectedMetric === null &&
-            (selectedDayFilter ? [selectedDayFilter] : expandedDays).map((day, idx) => (
-              <div
-                key={idx}
-                className="p-2 font-bold border border-white text-center bg-[#2a2a2a]"
-              >
-                {day}
-              </div>
-            ))}
-          {selectedMetric !== null && (
-            <div className="p-2 font-bold border border-white text-center bg-[#2a2a2a]">
-              {selectedMetric === 'completion'
-                ? 'Completado'
-                : selectedMetric === 'attempts'
-                ? 'Promedio Intentos'
-                : 'Promedio Tiempo'}
-            </div>
-          )}
+          {(selectedMetric === null ? (selectedDayFilter ? [selectedDayFilter] : expandedDays) : [selectedMetric]).map((col, idx) => (
+            <div key={idx} className="p-2 font-bold border border-white text-center bg-[#2a2a2a]">{selectedMetric ? (selectedMetric === 'completion' ? 'Completado' : selectedMetric === 'attempts' ? 'Promedio Intentos' : 'Promedio Tiempo') : col}</div>
+          ))}
         </div>
-
-        {students.map((student) => (
-          <div
-            key={student.id}
-            className="grid grid-cols-[200px_repeat(auto-fill,minmax(60px,1fr))] border border-white"
-          >
-            <div
-              className="p-2 border border-white cursor-pointer hover:bg-[#333] bg-[#1e1e1e]"
-              onClick={() => setSelectedStudent(student)}
-            >
-              {student.name}
-            </div>
-            {selectedMetric === null &&
-              (selectedDayFilter ? [selectedDayFilter] : expandedDays).map((_, idx) => {
-                const index = expandedDays.indexOf(_);
-                const val = student.progress[index];
-                let cellClass = 'p-2 border border-white text-center';
-                if (selectedDayFilter === _) cellClass += ' bg-green-700';
-                if (val === '○') cellClass += ' bg-yellow-600';
-                if (!val) cellClass += ' bg-[#2a2a2a]';
-                return (
-                  <div key={idx} className={cellClass}>
-                    {val === '✓' ? (
-                      <FaCheck className="text-green-400 inline" />
-                    ) : val === 'X' ? (
-                      <FaTimes className="text-red-400 inline" />
-                    ) : (
-                      <span className="text-gray-400 text-sm">–</span>
-                    )}
-                  </div>
-                );
-              })}
-            {selectedMetric === 'completion' && (
-              <div className="p-2 border border-white">
-                <div className="w-full bg-gray-700 rounded h-5">
-                  <div
-                    className="bg-green-400 h-5 rounded"
-                    style={{ width: `${student.completionRate}%` }}
-                  />
-                </div>
-                <div className="text-xs text-center mt-1">
-                  {student.completionRate.toFixed(0)}%
-                </div>
-              </div>
-            )}
-            {selectedMetric === 'attempts' && (
-              <div className="p-2 border border-white text-center">
-                {student.averageAttempts}
-              </div>
-            )}
-            {selectedMetric === 'time' && (
-              <div className="p-2 border border-white text-center">
-                {student.averageTime}s
-              </div>
-            )}
+        {students.map(student => (
+          <div key={student.id} className="grid grid-cols-[200px_repeat(auto-fill,minmax(60px,1fr))] border border-white">
+            <div className="p-2 border border-white cursor-pointer hover:bg-[#333] bg-[#1e1e1e]" onClick={() => setSelectedStudent(student)}>{student.name}</div>
+            {(selectedMetric === null ? (selectedDayFilter ? [selectedDayFilter] : expandedDays) : [selectedMetric]).map((col, idx) => {
+              if (selectedMetric) {
+                return <div key={idx} className="p-2 border border-white text-center">{selectedMetric === 'completion' ? `${student.completionRate.toFixed(0)}%` : selectedMetric === 'attempts' ? student.averageAttempts : `${student.averageTime}s`}</div>;
+              }
+              const i = expandedDays.indexOf(col as string);
+              const val = student.progress[i];
+              let cellClass = 'p-2 border border-white text-center';
+              if (selectedDayFilter === col) cellClass += ' bg-green-700';
+              if (val === '○') cellClass += ' bg-yellow-600';
+              if (!val) cellClass += ' bg-[#2a2a2a]';
+              return <div key={idx} className={cellClass}>{val === '✓' ? <FaCheck className="text-green-400 inline" /> : val === 'X' ? <FaTimes className="text-red-400 inline" /> : <span className="text-gray-400 text-sm">–</span>}</div>;
+            })}
           </div>
         ))}
-
-        {students.length === 0 && (
-          <div className="mt-4 text-center text-gray-400">No hay estudiantes registrados.</div>
-        )}
+        {students.length === 0 && <div className="mt-4 text-center text-gray-400">No hay estudiantes registrados.</div>}
       </div>
-
-      {selectedStudent && (
-        <div className="w-[320px] border-l bg-[#1e1e1e] text-white shadow-md p-4 overflow-y-auto">
-          <StudentDrawer
-            name={selectedStudent.name}
-            uid={selectedStudent.id}
-            day={selectedDayFilter}
-            progress={selectedStudent.progress}
-            onClose={() => setSelectedStudent(null)}
-          />
-        </div>
-      )}
-
+      {/* Drawer de estudiante */}
+      {selectedStudent && <div className="w-[320px] border-l bg-[#1e1e1e] text-white shadow-md p-4 overflow-y-auto"><StudentDrawer name={selectedStudent.name} uid={selectedStudent.id} day={selectedDayFilter} progress={selectedStudent.progress} onClose={() => setSelectedStudent(null)} /></div>}
+      {/* Modal Registrar Estudiante */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white text-black rounded p-6 w-96 space-y-4">
+          <div className="bg-white text-black rounded p-6 w-96 space-y-4">    
             <h2 className="text-lg font-bold mb-4">Registrar Estudiante</h2>
-            <input
-              type="text"
-              placeholder="Nombre completo"
-              className="w-full p-2 border"
-              value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
-            />
-            <input
-              type="email"
-              placeholder="Correo electrónico"
-              className="w-full p-2 border"
-              value={formData.email}
-              onChange={(e) =>
-                setFormData({ ...formData, email: e.target.value })
-              }
-            />
-            <input
-              type="text"
-              placeholder="Cédula"
-              className="w-full p-2 border"
-              value={formData.documentId}
-              onChange={(e) =>
-                setFormData({ ...formData, documentId: e.target.value })
-              }
-            />
+            <input ref={nameInputRef} autoFocus={false} type="text" placeholder="Nombre completo" className="w-full p-2 border" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+            <input type="email" placeholder="Correo electrónico" className="w-full p-2 border" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
+            <input type="text" placeholder="Cédula" className="w-full p-2 border" value={formData.documentId} onChange={e => setFormData({ ...formData, documentId: e.target.value })} />
+            {generatedPassword && (
+              <div className="bg-green-100 text-green-800 p-2 rounded text-sm flex items-center justify-between">
+                Contraseña asignada: <span className="font-mono">{generatedPassword}</span>
+                <button onClick={() => navigator.clipboard.writeText(generatedPassword)} title="Copiar contraseña"><FaCopy className="ml-2" /></button>
+              </div>
+            )}
             <div className="flex justify-end gap-2 mt-4">
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 bg-gray-300 rounded"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={registerStudent}
-                className="px-4 py-2 bg-green-600 text-white rounded"
-              >
-                Registrar
-              </button>
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 bg-gray-300 rounded">Cancelar</button>
+              <button onClick={registerStudent} className="px-4 py-2 bg-green-600 text-white rounded">Registrar</button>
             </div>
           </div>
         </div>
