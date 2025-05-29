@@ -115,18 +115,19 @@ export default function StudentView() {
           <FaBars />
         </button>
 
-        {sidebarOpen && (
-          <div className="mt-10 w-full px-4">
-            <h2 className="text-lg font-semibold mb-6">Menú</h2>
-            <button
-              onClick={() => router.push("/teacherview")}
-              className="flex items-center gap-2 w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
-            >
-              <FaChalkboardTeacher />
-              Vista de Profesor
-            </button>
-          </div>
-        )}
+        {/* Botón de vista profesor */}
+        <div className="mt-10 w-full px-4 flex justify-center">
+          <button
+            onClick={() => router.push("/teacherview")}
+            className={`flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded transition-all ${
+              sidebarOpen ? "w-full justify-start" : "w-12 justify-center"
+            }`}
+            title="Vista de Profesor"
+          >
+            <FaChalkboardTeacher />
+            {sidebarOpen && <span className="whitespace-nowrap">Vista de Profesor</span>}
+          </button>
+        </div>
       </div>
 
       {/* Título */}
