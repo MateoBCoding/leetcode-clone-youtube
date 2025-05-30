@@ -215,13 +215,13 @@ function TeacherView() {
       link: '',
       videoId: '',
     });
+        
+    const courseSnapshot = await getDocs(collection(firestore, 'courses'));
+    const courseDoc = courseSnapshot.docs[0]; // primer curso que encuentra
 
-    // 2. Asociar el problema al día correcto en el curso
-    const courseRef = doc(firestore, 'courses', 'main-course');
-    const courseSnap = await getDoc(courseRef);
-
-    if (courseSnap.exists()) {
-      const data = courseSnap.data();
+    if (courseDoc.exists()) {
+      const data = courseDoc.data();
+      const courseRef = courseDoc.ref;
       const updatedDays = [...(data.days || [])];
       const parsedDay = parseInt(problemDay);
 
@@ -230,17 +230,21 @@ function TeacherView() {
 
       if (!dayObj) {
         // Si no existe, lo creamos
-        dayObj = { day: parsedDay, problems: [] };
+        dayObj = { day: parsedDay, problems: [problemId] };
         updatedDays.push(dayObj);
+      } else {
+        // Si existe, evitar duplicados
+        if (!dayObj.problems.includes(problemId)) {
+          dayObj.problems.push(problemId);
+        }
       }
-
-      // Evitar duplicados
-      if (!dayObj.problems.includes(problemId)) {
-        dayObj.problems.push(problemId);
-      }
+      console.log("Día asignado:", parsedDay);
+      console.log("ID del problema:", problemId);
+      console.log("Días actualizados:", JSON.stringify(updatedDays, null, 2));
 
       await updateDoc(courseRef, { days: updatedDays });
     }
+        
 
     alert('✅ Problema creado y asignado correctamente');
     setProblemId('');
