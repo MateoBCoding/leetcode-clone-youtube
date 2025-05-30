@@ -1,17 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FaCheck, FaTimes, FaSignOutAlt, FaUserCircle, FaCopy } from 'react-icons/fa';
 import { StudentDrawer } from '../pages/studentdrawer';
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  arrayUnion,
-} from 'firebase/firestore';
+import {collection,getDocs,query,where,doc,getDoc,setDoc,updateDoc,arrayUnion,} from 'firebase/firestore';
 import { useRouter } from 'next/router';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { signOut, createUserWithEmailAndPassword } from 'firebase/auth';
@@ -19,6 +9,7 @@ import { getAuth as getAuthSecondary } from 'firebase/auth';
 import { initializeApp, getApps } from 'firebase/app';
 import { firestore, auth, firebaseConfig } from '@/firebase/firebase';
 import { getDayIndexFromProblemId } from './studentdrawer';
+
 
 // App secundaria para crear usuarios sin cerrar sesión principal
 const secondaryApp = getApps().find(app => app.name === 'Secondary')
@@ -29,6 +20,8 @@ const days = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6'];
 type Metric = 'completion' | 'attempts' | 'time' | null;
 
 function TeacherView() {
+  const [problemDescription, setProblemDescription] = useState('');
+  const [expectedOutput, setExpectedOutput] = useState('');
   const [expandedDays, setExpandedDays] = useState(days);
   const [selectedDayFilter, setSelectedDayFilter] = useState<string | null>(null);
   const [students, setStudents] = useState<any[]>([]);
@@ -37,10 +30,20 @@ function TeacherView() {
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({ name: '', email: '', documentId: '' });
   const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
-
+  // Estados adicionales
+  const [showCreateProblemForm, setShowCreateProblemForm] = useState(false);
   const router = useRouter();
   const [user, loading] = useAuthState(auth);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const [showExerciseForm, setShowExerciseForm] = useState(false);
+  const [starterCode, setStarterCode] = useState('');
+  const [starterFunctionName, setStarterFunctionName] = useState('');
+  const [constraints, setConstraints] = useState('');
+  const [exampleInput, setExampleInput] = useState('');
+  const [exampleOutput, setExampleOutput] = useState('');
+  const [exampleExplanation, setExampleExplanation] = useState('');
+
+
 
   // Control de acceso del profesor
   useEffect(() => {
@@ -131,10 +134,9 @@ function TeacherView() {
     }
     const password = generatePassword();
     try {
-      // Crear cuenta en Auth sin cerrar sesión principal
       const userCred = await createUserWithEmailAndPassword(secondaryAuth, formData.email, password);
       const studentUID = userCred.user.uid;
-      // Guardar datos del estudiante en Firestore
+
       await setDoc(doc(firestore, 'users', studentUID), {
         uid: studentUID,
         email: formData.email,
@@ -149,11 +151,11 @@ function TeacherView() {
         dislikedProblems: [],
         starredProblems: [],
       });
-      // Agregar estudiante al array del profesor
+
       await updateDoc(doc(firestore, 'users', user!.uid), {
         students: arrayUnion(studentUID),
       });
-      // Mostrar contraseña y cerrar modal
+
       setGeneratedPassword(password);
       setShowModal(false);
       setFormData({ name: '', email: '', documentId: '' });
@@ -164,34 +166,282 @@ function TeacherView() {
     }
   };
 
-  return (
-    <div className="flex h-screen overflow-hidden bg-[#1e1e1e] text-white">
-      <div className="flex-1 overflow-y-auto">
-        {/* Topbar y botones de acción */}
-        <div className="bg-green-600 px-6 py-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-semibold">Cursos</h2>
-            <h1 className="text-2xl font-bold text-center flex-1">Seguimiento de Progreso Estudiantil</h1>
-            <div className="flex items-center gap-4">
-              <button onClick={() => setShowModal(true)} className="px-3 py-1 bg-white text-green-700 rounded font-semibold">+ Registrar Estudiante</button>
-              <FaUserCircle className="text-3xl text-white" />
-              <button onClick={() => signOut(auth)} className="text-white hover:text-gray-300 transition" title="Cerrar sesión"><FaSignOutAlt className="text-2xl" /></button>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <button className={`border p-4 text-center font-medium ${selectedMetric === 'completion' ? 'bg-white text-green-600 font-bold' : ''}`} onClick={() => toggleMetric('completion')}>📊 % de estudiantes completo</button>
-            <button className={`border p-4 text-center font-medium ${selectedMetric === 'attempts' ? 'bg-white text-green-600 font-bold' : ''}`} onClick={() => toggleMetric('attempts')}>🔁 Promedio de intentos</button>
-            <button className={`border p-4 text-center font-medium ${selectedMetric === 'time' ? 'bg-white text-green-600 font-bold' : ''}`} onClick={() => toggleMetric('time')}>⏱️ Tiempo promedio</button>
+    const [problemId, setProblemId] = useState('');
+    const [problemTitle, setProblemTitle] = useState('');
+    const [problemDifficulty, setProblemDifficulty] = useState('Easy');
+    const [problemDay, setProblemDay] = useState('1');
+    const [loadingProblemCreate, setLoadingProblemCreate] = useState(false);
+
+  const handleCreateProblem = async () => {
+    if (
+      !problemId ||
+      !problemTitle ||
+      !problemDescription ||
+      !expectedOutput ||
+      !problemDifficulty ||
+      !problemDay
+    ) {
+      return alert('Todos los campos son requeridos');
+    }
+
+  setLoadingProblemCreate(true);
+  try {
+    // 1. Guardar el nuevo problema en la colección "problems"
+    const problemRef = doc(firestore, 'problems', problemId);
+    await setDoc(problemRef, {
+      id: problemId,
+      title: problemTitle,
+      difficulty: problemDifficulty,
+      category: 'Array',
+      starterCode,
+      starterFunctionName,
+      problemStatement: problemDescription,
+      constraints,
+      testCases: [
+        {
+          input: exampleInput,
+          output: exampleOutput,
+        },
+      ],
+      examples: [
+        {
+          id: 1,
+          inputText: exampleInput,
+          outputText: exampleOutput,
+          explanation: exampleExplanation,
+        },
+      ],
+      order: 0,
+      link: '',
+      videoId: '',
+    });
+
+    // 2. Asociar el problema al día correcto en el curso
+    const courseRef = doc(firestore, 'courses', 'main-course');
+    const courseSnap = await getDoc(courseRef);
+
+    if (courseSnap.exists()) {
+      const data = courseSnap.data();
+      const updatedDays = [...(data.days || [])];
+      const parsedDay = parseInt(problemDay);
+
+      // Buscar si ya existe un objeto con day === parsedDay
+      let dayObj = updatedDays.find((d) => d.day === parsedDay);
+
+      if (!dayObj) {
+        // Si no existe, lo creamos
+        dayObj = { day: parsedDay, problems: [] };
+        updatedDays.push(dayObj);
+      }
+
+      // Evitar duplicados
+      if (!dayObj.problems.includes(problemId)) {
+        dayObj.problems.push(problemId);
+      }
+
+      await updateDoc(courseRef, { days: updatedDays });
+    }
+
+    alert('✅ Problema creado y asignado correctamente');
+    setProblemId('');
+    setProblemTitle('');
+    setProblemDescription('');
+    setExpectedOutput('');
+    setStarterCode('');
+    setStarterFunctionName('');
+    setConstraints('');
+    setExampleInput('');
+    setExampleOutput('');
+    setExampleExplanation('');
+  } catch (err) {
+    console.error(err);
+    alert('❌ Error al guardar el ejercicio');
+  } finally {
+    setLoadingProblemCreate(false);
+  }
+};
+
+
+
+
+return (
+  <div className="flex h-screen overflow-hidden bg-[#1e1e1e] text-white">
+    <div className="flex-1 overflow-y-auto">
+      {/* Topbar y botones de acción */}
+      <div className="bg-green-600 px-6 py-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-lg font-semibold">Cursos</h2>
+          <h1 className="text-2xl font-bold text-center flex-1">Seguimiento de Progreso Estudiantil</h1>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setShowModal(true)}
+              className="px-3 py-1 bg-white text-green-700 rounded font-semibold"
+            >
+              + Registrar Estudiante
+            </button>
+            <FaUserCircle className="text-3xl text-white" />
+            <button
+              onClick={() => signOut(auth)}
+              className="text-white hover:text-gray-300 transition"
+              title="Cerrar sesión"
+            >
+              <FaSignOutAlt className="text-2xl" />
+            </button>
           </div>
         </div>
-        {/* Filtros de días */}
-        <div className="px-6 py-4 bg-[#1e1e1e]">
-          <div className="flex items-center gap-2 overflow-x-auto mb-4">
-            {expandedDays.map((day, idx) => (
-              <button key={idx} onClick={() => setSelectedDayFilter(day === selectedDayFilter ? null : day)} className={`border px-4 py-2 rounded hover:bg-green-700 ${selectedDayFilter === day ? 'bg-white text-green-600 font-bold' : 'border-white text-white'}`}>{day}</button>
+        <div className="grid grid-cols-3 gap-4">
+          <button
+            className={`border p-4 text-center font-medium ${selectedMetric === 'completion' ? 'bg-white text-green-600 font-bold' : ''}`}
+            onClick={() => toggleMetric('completion')}
+          >
+            📊 % de estudiantes completo
+          </button>
+          <button
+            className={`border p-4 text-center font-medium ${selectedMetric === 'attempts' ? 'bg-white text-green-600 font-bold' : ''}`}
+            onClick={() => toggleMetric('attempts')}
+          >
+            🔁 Promedio de intentos
+          </button>
+          <button
+            className={`border p-4 text-center font-medium ${selectedMetric === 'time' ? 'bg-white text-green-600 font-bold' : ''}`}
+            onClick={() => toggleMetric('time')}
+          >
+            ⏱️ Tiempo promedio
+          </button>
+        </div>
+      </div>
+
+      {/* Filtros de días */}
+      <div className="px-6 py-4 bg-[#1e1e1e]">
+        <div className="flex items-center gap-2 overflow-x-auto mb-4">
+          {expandedDays.map((day, idx) => (
+            <button
+              key={idx}
+              onClick={() => setSelectedDayFilter(day === selectedDayFilter ? null : day)}
+              className={`border px-4 py-2 rounded hover:bg-green-700 ${selectedDayFilter === day ? 'bg-white text-green-600 font-bold' : 'border-white text-white'}`}
+            >
+              {day}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => setShowExerciseForm(!showExerciseForm)}
+          className="mt-2 px-4 py-2 bg-white text-green-700 font-semibold rounded"
+        >
+          {showExerciseForm ? '✖ Ocultar formulario' : '➕ Crear nuevo ejercicio'}
+        </button>
+      </div>
+
+      {/* Formulario Condicional */}
+      {showExerciseForm && (
+        <div className="bg-dark-fill-2 text-white p-4 rounded-xl max-w-xl mx-6 mb-6 border border-green-700">
+          <h3 className="text-lg font-bold mb-4">Crear nuevo ejercicio</h3>
+
+          <input
+            className="w-full p-2 mb-2 rounded text-black"
+            placeholder="ID del ejercicio (ej. two-sum)"
+            value={problemId}
+            onChange={(e) => setProblemId(e.target.value)}
+          />
+
+          <input
+            className="w-full p-2 mb-2 rounded text-black"
+            placeholder="Título del ejercicio"
+            value={problemTitle}
+            onChange={(e) => setProblemTitle(e.target.value)}
+          />
+
+          <textarea
+            className="w-full p-2 mb-2 rounded text-black"
+            placeholder="Descripción del ejercicio (explicación del enunciado)"
+            value={problemDescription}
+            onChange={(e) => setProblemDescription(e.target.value)}
+            rows={4}
+          />
+
+          <input
+            className="w-full p-2 mb-2 rounded text-black"
+            placeholder="Respuesta esperada por consola (output)"
+            value={expectedOutput}
+            onChange={(e) => setExpectedOutput(e.target.value)}
+          />
+
+          <textarea
+            className="w-full p-2 mb-2 rounded text-black"
+            placeholder="Código base del estudiante"
+            value={starterCode}
+            onChange={(e) => setStarterCode(e.target.value)}
+            rows={3}
+          />
+
+          <input
+            className="w-full p-2 mb-2 rounded text-black"
+            placeholder="Nombre de la función (ej. function twoSum("
+            value={starterFunctionName}
+            onChange={(e) => setStarterFunctionName(e.target.value)}
+          />
+
+          <textarea
+            className="w-full p-2 mb-2 rounded text-black"
+            placeholder="Restricciones del ejercicio (en HTML opcional)"
+            value={constraints}
+            onChange={(e) => setConstraints(e.target.value)}
+            rows={2}
+          />
+
+          <h4 className="mt-2 font-semibold text-sm mb-1">Ejemplo</h4>
+          <input
+            className="w-full p-2 mb-1 rounded text-black"
+            placeholder="Input del ejemplo"
+            value={exampleInput}
+            onChange={(e) => setExampleInput(e.target.value)}
+          />
+          <input
+            className="w-full p-2 mb-1 rounded text-black"
+            placeholder="Output del ejemplo"
+            value={exampleOutput}
+            onChange={(e) => setExampleOutput(e.target.value)}
+          />
+          <input
+            className="w-full p-2 mb-4 rounded text-black"
+            placeholder="Explicación del ejemplo"
+            value={exampleExplanation}
+            onChange={(e) => setExampleExplanation(e.target.value)}
+          />
+          <select
+            className="w-full p-2 mb-2 rounded text-black"
+            value={problemDifficulty}
+            onChange={(e) => setProblemDifficulty(e.target.value)}
+          >
+            <option value="Easy">Fácil</option>
+            <option value="Medium">Media</option>  
+            <option value="Hard">Difícil</option>
+          </select>
+
+
+          <select
+            className="w-full p-2 mb-4 rounded text-black"
+            value={problemDay}
+            onChange={(e) => setProblemDay(e.target.value)}
+          >
+            {[1, 2, 3, 4, 5, 6].map((d) => (
+              <option key={d} value={d.toString()}>{`Día ${d}`}</option>
+
             ))}
-          </div>
+          </select>
+
+          <button
+            onClick={handleCreateProblem}
+            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+            disabled={loadingProblemCreate}
+          >
+            {loadingProblemCreate ? 'Guardando...' : 'Guardar ejercicio'}
+          </button>
         </div>
+      )}
+
+
+
         {/* Tabla de estudiantes */}
         <div className="grid grid-cols-[200px_repeat(auto-fill,minmax(60px,1fr))] border border-white">
           <div className="p-2 font-bold border border-white bg-[#2a2a2a]">Nombre</div>
@@ -215,7 +465,8 @@ function TeacherView() {
               return <div key={idx} className={cellClass}>{val === '✓' ? <FaCheck className="text-green-400 inline" /> : val === 'X' ? <FaTimes className="text-red-400 inline" /> : <span className="text-gray-400 text-sm">–</span>}</div>;
             })}
           </div>
-        ))}
+        )
+        )}
         {students.length === 0 && <div className="mt-4 text-center text-gray-400">No hay estudiantes registrados.</div>}
       </div>
       {/* Drawer de estudiante */}
