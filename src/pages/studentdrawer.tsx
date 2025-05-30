@@ -17,39 +17,62 @@ interface Stat {
   totalExecutionTime: number;
   success: boolean;
   lastSubmittedAt: number;
+  userId: string;
+}
+
+interface CourseDay {
+  day: number;
+  problems: string[];
 }
 
 export const StudentDrawer: React.FC<Props> = ({ name, uid, day, progress, onClose }) => {
   const [stats, setStats] = useState<Stat[]>([]);
+  const [courseDays, setCourseDays] = useState<CourseDay[]>([]);
+  const [dayStatsMap, setDayStatsMap] = useState<Record<number, Stat[]>>({});
 
   useEffect(() => {
-    const fetchStats = async () => {
+    const fetchData = async () => {
       try {
-        const usersRef = collection(firestore, 'user_problem_stats');
-        const q = query(usersRef, where('userId', '==', uid));
-        const querySnapshot = await getDocs(q);
+        // Obtener estadísticas del usuario
+        const statsRef = collection(firestore, 'user_problem_stats');
+        const statsQuery = query(statsRef, where('userId', '==', uid));
+        const statsSnapshot = await getDocs(statsQuery);
 
         const statList: Stat[] = [];
-        querySnapshot.forEach((doc) => {
+        statsSnapshot.forEach((doc) => {
           const data = doc.data() as Stat;
           statList.push(data);
         });
 
+        // Obtener los días del curso
+        const courseSnapshot = await getDocs(collection(firestore, 'courses'));
+        const courseDoc = courseSnapshot.docs[0];
+        const courseData = courseDoc.data();
+        const courseDaysData: CourseDay[] = courseData.days || [];
+
+        // Agrupar estadísticas por día
+        const map: Record<number, Stat[]> = {};
+        for (const dayObj of courseDaysData) {
+          map[dayObj.day] = statList.filter(stat => dayObj.problems.includes(stat.problemId));
+        }
+
         setStats(statList);
+        setCourseDays(courseDaysData);
+        setDayStatsMap(map);
       } catch (error) {
-        console.error("Error al obtener stats para el usuario:", uid, error);
+        console.error("Error al obtener datos para el usuario:", uid, error);
       }
     };
 
-    fetchStats();
+    fetchData();
   }, [uid]);
 
-  const filtered = day
-    ? [{ day, status: progress[parseInt(day.slice(1)) - 1] }]
-    : progress.map((status, i) => ({ day: `D${i + 1}`, status }));
+  const filteredDays = day
+    ? courseDays.filter(d => `D${d.day}` === day)
+    : courseDays;
 
   return (
-    <div className="relative bg-[#1e1e1e] text-white h-full p-4">
+    <div className="relative bg-[#1e1e1e] text-white h-full p-4 overflow-y-auto">
       {/* Botón de cerrar */}
       <button
         onClick={onClose}
@@ -62,13 +85,12 @@ export const StudentDrawer: React.FC<Props> = ({ name, uid, day, progress, onClo
       <h2 className="font-bold mb-4 text-lg pt-2 pr-6">Métricas de {name}</h2>
 
       <ul className="text-sm list-disc list-inside space-y-4">
-        {filtered.map((entry) => {
-          const dayIndex = parseInt(entry.day.slice(1)) - 1;
-          const statsForDay = stats.filter((s) => getDayIndexFromProblemId(s.problemId) === dayIndex);
+        {filteredDays.map((dayObj) => {
+          const statsForDay = dayStatsMap[dayObj.day] || [];
 
           return (
-            <li key={entry.day}>
-              <span className="font-semibold">{entry.day}</span>: {entry.status || 'Sin actividad'}
+            <li key={dayObj.day}>
+              <span className="font-semibold">{`D${dayObj.day}`}</span>: {progress[dayObj.day - 1] || 'Sin actividad'}
               <ul className="ml-4 list-disc text-xs mt-1 text-gray-300">
                 {statsForDay.length > 0 ? (
                   statsForDay.map((stat) => (
@@ -90,18 +112,4 @@ export const StudentDrawer: React.FC<Props> = ({ name, uid, day, progress, onClo
       </ul>
     </div>
   );
-};
-
-export const getDayIndexFromProblemId = (pid: string): number => {
-  const dayProblemMap: Record<string, number> = {
-    'two-sum': 0,
-    'reverse-string': 1,
-    'fizzbuzz': 2,
-    'valid-parentheses': 3,
-    'merge-sorted-array': 4,
-    'palindrome-number': 5,
-    'max-subarray': 3,
-  };
-
-  return dayProblemMap[pid] ?? -1;
 };

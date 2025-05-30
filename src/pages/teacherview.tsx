@@ -8,7 +8,7 @@ import { signOut, createUserWithEmailAndPassword } from 'firebase/auth';
 import { getAuth as getAuthSecondary } from 'firebase/auth';
 import { initializeApp, getApps } from 'firebase/app';
 import { firestore, auth, firebaseConfig } from '@/firebase/firebase';
-import { getDayIndexFromProblemId } from './studentdrawer';
+//import { getDayIndexFromProblemId } from './studentdrawer';
 
 
 // App secundaria para crear usuarios sin cerrar sesión principal
@@ -16,13 +16,16 @@ const secondaryApp = getApps().find(app => app.name === 'Secondary')
   || initializeApp(firebaseConfig, 'Secondary');
 const secondaryAuth = getAuthSecondary(secondaryApp);
 
-const days = ['D1', 'D2', 'D3', 'D4', 'D5', 'D6'];
+
+
+
+
+
 type Metric = 'completion' | 'attempts' | 'time' | null;
 
 function TeacherView() {
   const [problemDescription, setProblemDescription] = useState('');
   const [expectedOutput, setExpectedOutput] = useState('');
-  const [expandedDays, setExpandedDays] = useState(days);
   const [selectedDayFilter, setSelectedDayFilter] = useState<string | null>(null);
   const [students, setStudents] = useState<any[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
@@ -42,6 +45,25 @@ function TeacherView() {
   const [exampleInput, setExampleInput] = useState('');
   const [exampleOutput, setExampleOutput] = useState('');
   const [exampleExplanation, setExampleExplanation] = useState('');
+  const [days, setDays] = useState<string[]>([]);
+  const [expandedDays, setExpandedDays] = useState<string[]>([]);
+
+  useEffect(() => {
+  const fetchDays = async () => {
+    const courseSnapshot = await getDocs(collection(firestore, 'courses'));
+    const courseDoc = courseSnapshot.docs[0];
+
+    if (courseDoc.exists()) {
+      const data = courseDoc.data();
+      const dynamicDays = (data.days || [])
+        .sort((a: any, b: any) => a.day - b.day)
+        .map((d: any) => `D${d.day}`);
+      setDays(dynamicDays);
+      setExpandedDays(dynamicDays);
+    }
+  };
+  fetchDays();
+  }, []);
 
 
 
@@ -58,10 +80,17 @@ function TeacherView() {
   }, [user, loading, router]);
 
   // Carga de estudiantes y estadísticas
-  useEffect(() => {
+// ...todo el resto igual hasta el useEffect de estudiantes...
+
+  // Carga de estudiantes y estadísticas
+    useEffect(() => {
     const fetchStudents = async () => {
       try {
         const usersSnapshot = await getDocs(collection(firestore, 'users'));
+        const courseSnapshot = await getDocs(collection(firestore, 'courses'));
+        const courseDoc = courseSnapshot.docs[0];
+        const courseData = courseDoc?.data();
+
         const studentsData: any[] = [];
 
         for (const docSnap of usersSnapshot.docs) {
@@ -71,28 +100,47 @@ function TeacherView() {
           const userId = docSnap.id;
           const name = data.displayName || data.name || 'Sin nombre';
           const email = data.email || '';
-          const progress = Array(6).fill('');
           let totalAttempts = 0;
           let totalTime = 0;
           let successCount = 0;
 
           const statsSnapshot = await getDocs(
-            query(collection(firestore, 'user_problem_stats'), where('userId', '==', userId))
+            query(
+              collection(firestore, 'user_problem_stats'),
+              where('userId', '==', userId)
+            )
           );
+
+          const statsByDay: Record<number, boolean[]> = {};
 
           statsSnapshot.docs.forEach((doc) => {
             const stat = doc.data();
-            const dayIndex = getDayIndexFromProblemId(stat.problemId);
+            const problemId = stat.problemId;
+
+            const dayIndex = days.findIndex((d) => {
+              const dayNumber = parseInt(d.replace('D', ''));
+              return courseData?.days?.some(
+                (day: any) => day.day === dayNumber && day.problems.includes(problemId)
+              );
+            });
+
             if (dayIndex !== -1) {
-              if (stat.success) {
-                progress[dayIndex] = '✓';
-                successCount++;
-              } else if (progress[dayIndex] !== '✓') {
-                progress[dayIndex] = 'X';
-              }
+              if (!statsByDay[dayIndex]) statsByDay[dayIndex] = [];
+              statsByDay[dayIndex].push(stat.success);
               totalAttempts += stat.executionCount || 0;
               totalTime += stat.totalExecutionTime || 0;
+              if (stat.success) successCount++;
             }
+          });
+
+          const progress = days.map((_, idx) => {
+            const statuses = statsByDay[idx] || [];
+            if (statuses.length === 0) return '';
+            const allTrue = statuses.every(Boolean);
+            const allFalse = statuses.every((s) => s === false);
+            if (allTrue) return '✓';
+            if (allFalse) return 'X';
+            return 'O';
           });
 
           studentsData.push({
@@ -116,6 +164,7 @@ function TeacherView() {
     };
     fetchStudents();
   }, [generatedPassword]);
+
 
   // Cuando se abre el modal, enfocamos el input si no estamos en un iframe
   useEffect(() => {
@@ -282,8 +331,18 @@ return (
               className="px-3 py-1 bg-white text-green-700 rounded font-semibold"
             >
               + Registrar Estudiante
-            </button>
-            <FaUserCircle className="text-3xl text-white" />
+            </button> {/*boton usuario*/}
+            <div className="relative group">
+              <FaUserCircle className="text-3xl text-white cursor-pointer" />
+              {user?.email && (
+                <div className="absolute top-10 left-1/2 -translate-x-1/2 px-3 py-1 bg-gray-800 text-white text-sm rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                  {user.email}
+                </div>
+              )}
+            </div>
+
+
+
             <button
               onClick={() => signOut(auth)}
               className="text-white hover:text-gray-300 transition"
@@ -445,33 +504,101 @@ return (
       )}
 
 
-
-        {/* Tabla de estudiantes */}
-        <div className="grid grid-cols-[200px_repeat(auto-fill,minmax(60px,1fr))] border border-white">
-          <div className="p-2 font-bold border border-white bg-[#2a2a2a]">Nombre</div>
-          {(selectedMetric === null ? (selectedDayFilter ? [selectedDayFilter] : expandedDays) : [selectedMetric]).map((col, idx) => (
-            <div key={idx} className="p-2 font-bold border border-white text-center bg-[#2a2a2a]">{selectedMetric ? (selectedMetric === 'completion' ? 'Completado' : selectedMetric === 'attempts' ? 'Promedio Intentos' : 'Promedio Tiempo') : col}</div>
-          ))}
-        </div>
-        {students.map(student => (
-          <div key={student.id} className="grid grid-cols-[200px_repeat(auto-fill,minmax(60px,1fr))] border border-white">
-            <div className="p-2 border border-white cursor-pointer hover:bg-[#333] bg-[#1e1e1e]" onClick={() => setSelectedStudent(student)}>{student.name}</div>
-            {(selectedMetric === null ? (selectedDayFilter ? [selectedDayFilter] : expandedDays) : [selectedMetric]).map((col, idx) => {
-              if (selectedMetric) {
-                return <div key={idx} className="p-2 border border-white text-center">{selectedMetric === 'completion' ? `${student.completionRate.toFixed(0)}%` : selectedMetric === 'attempts' ? student.averageAttempts : `${student.averageTime}s`}</div>;
-              }
-              const i = expandedDays.indexOf(col as string);
-              const val = student.progress[i];
-              let cellClass = 'p-2 border border-white text-center';
-              if (selectedDayFilter === col) cellClass += ' bg-green-700';
-              if (val === '○') cellClass += ' bg-yellow-600';
-              if (!val) cellClass += ' bg-[#2a2a2a]';
-              return <div key={idx} className={cellClass}>{val === '✓' ? <FaCheck className="text-green-400 inline" /> : val === 'X' ? <FaTimes className="text-red-400 inline" /> : <span className="text-gray-400 text-sm">–</span>}</div>;
-            })}
+      {/* Tabla de estudiantes */}
+      <div
+        className="grid border border-white"
+        style={{
+          gridTemplateColumns: selectedMetric
+            ? '200px 1fr'
+            : selectedDayFilter
+            ? '200px 100px'
+            : `200px repeat(${expandedDays.length}, 60px)`,
+        }}
+      >
+        <div className="p-2 font-bold border border-white bg-[#2a2a2a]">Nombre</div>
+        {(selectedMetric === null ? (selectedDayFilter ? [selectedDayFilter] : expandedDays) : [selectedMetric]).map((col, idx) => (
+          <div
+            key={idx}
+            className="p-2 font-bold border border-white text-center bg-[#2a2a2a] truncate"
+            title={
+              selectedMetric
+                ? selectedMetric === 'completion'
+                  ? 'Completado'
+                  : selectedMetric === 'attempts'
+                  ? 'Promedio Intentos'
+                  : 'Promedio Tiempo'
+                : col
+            }
+          >
+            {selectedMetric
+              ? selectedMetric === 'completion'
+                ? 'Completado'
+                : selectedMetric === 'attempts'
+                ? 'Promedio Intentos'
+                : 'Promedio Tiempo'
+              : col}
           </div>
-        )
-        )}
-        {students.length === 0 && <div className="mt-4 text-center text-gray-400">No hay estudiantes registrados.</div>}
+        ))}
+      </div>
+
+      {students.map(student => (
+        <div
+          key={student.id}
+          className="grid border border-white"
+          style={{
+            gridTemplateColumns: selectedMetric
+              ? '200px 1fr'
+              : selectedDayFilter
+              ? '200px 100px'
+              : `200px repeat(${expandedDays.length}, 60px)`,
+          }}
+        >
+          <div
+            className="p-2 border border-white cursor-pointer hover:bg-[#333] bg-[#1e1e1e]"
+            onClick={() => setSelectedStudent(student)}
+          >
+            {student.name}
+          </div>
+          {(selectedMetric === null ? (selectedDayFilter ? [selectedDayFilter] : expandedDays) : [selectedMetric]).map((col, idx) => {
+            if (selectedMetric) {
+              return (
+                <div
+                  key={idx}
+                  className="p-2 border border-white text-center truncate"
+                >
+                  {selectedMetric === 'completion'
+                    ? `${student.completionRate.toFixed(0)}%`
+                    : selectedMetric === 'attempts'
+                    ? student.averageAttempts
+                    : `${student.averageTime}s`}
+                </div>
+              );
+            }
+
+            const i = expandedDays.indexOf(col as string);
+            const val = student.progress[i];
+            let cellClass = 'p-2 border border-white text-center';
+            if (selectedDayFilter === col) cellClass += ' bg-green-700';
+            if (!val) cellClass += ' bg-[#2a2a2a]';
+            return (
+              <div key={idx} className={cellClass}>
+                {val === '✓' && <FaCheck className="text-green-400 inline" />}
+                {val === 'X' && <FaTimes className="text-red-400 inline" />}
+                {!val && <span className="text-gray-400 text-sm">–</span>}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+
+      {students.length === 0 && (
+        <div className="mt-4 text-center text-gray-400">
+          No hay estudiantes registrados.
+        </div>
+      )}
+
+
+
       </div>
       {/* Drawer de estudiante */}
       {selectedStudent && <div className="w-[320px] border-l bg-[#1e1e1e] text-white shadow-md p-4 overflow-y-auto"><StudentDrawer name={selectedStudent.name} uid={selectedStudent.id} day={selectedDayFilter} progress={selectedStudent.progress} onClose={() => setSelectedStudent(null)} /></div>}
