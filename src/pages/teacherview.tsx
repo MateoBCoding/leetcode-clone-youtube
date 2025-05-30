@@ -47,6 +47,8 @@ function TeacherView() {
   const [exampleExplanation, setExampleExplanation] = useState('');
   const [days, setDays] = useState<string[]>([]);
   const [expandedDays, setExpandedDays] = useState<string[]>([]);
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
+
 
   useEffect(() => {
   const fetchDays = async () => {
@@ -81,89 +83,104 @@ function TeacherView() {
 
 
  // Carga de estudiantes y estadísticas
-useEffect(() => {
-    const fetchStudents = async () => {
-      try {
-        const usersSnapshot = await getDocs(collection(firestore, 'users'));
-        const courseSnapshot = await getDocs(collection(firestore, 'courses'));
-        const courseDoc = courseSnapshot.docs[0];
-        const courseData = courseDoc?.data();
+    useEffect(() => {
+      const fetchStudents = async () => {
+        try {
+          if (!user) return;
 
-        const studentsData: any[] = [];
+          const currentUserRef = doc(firestore, 'users', user.uid);
+          const currentUserSnap = await getDoc(currentUserRef);
+          const currentUserData = currentUserSnap.data();
+          const role = currentUserData?.role?.toLowerCase();
+          const linkedStudentUIDs = currentUserData?.students || [];
 
-        for (const docSnap of usersSnapshot.docs) {
-          const data = docSnap.data();
-          if (data.role?.toLowerCase() !== 'estudiante') continue;
+          const usersSnapshot = await getDocs(collection(firestore, 'users'));
+          const courseSnapshot = await getDocs(collection(firestore, 'courses'));
+          const courseDoc = courseSnapshot.docs[0];
+          const courseData = courseDoc?.data();
 
-          const userId = docSnap.id;
-          const name = data.displayName || data.name || 'Sin nombre';
-          const email = data.email || '';
-          let totalAttempts = 0;
-          let totalTime = 0;
-          let successCount = 0;
+          const studentsData: any[] = [];
 
-          const statsSnapshot = await getDocs(
-            query(
-              collection(firestore, 'user_problem_stats'),
-              where('userId', '==', userId)
-            )
-          );
+          for (const docSnap of usersSnapshot.docs) {
+            const data = docSnap.data();
+            const isStudent = data.role?.toLowerCase() === 'estudiante';
+            const studentUID = docSnap.id;
 
-          const statsByDay: Record<number, boolean[]> = {};
+            // 🔒 FILTRO según el rol del usuario conectado
+            if (role === 'profesor' && !linkedStudentUIDs.includes(studentUID)) continue;
+            if (!isStudent) continue;
 
-          statsSnapshot.docs.forEach((doc) => {
-            const stat = doc.data();
-            const problemId = stat.problemId;
+            const name = data.displayName || data.name || 'Sin nombre';
+            const email = data.email || '';
+            let totalAttempts = 0;
+            let totalTime = 0;
+            let successCount = 0;
 
-            const dayIndex = days.findIndex((d) => {
-              const dayNumber = parseInt(d.replace('D', ''));
-              return courseData?.days?.some(
-                (day: any) => day.day === dayNumber && day.problems.includes(problemId)
-              );
+            const statsSnapshot = await getDocs(
+              query(
+                collection(firestore, 'user_problem_stats'),
+                where('userId', '==', studentUID)
+              )
+            );
+
+            const statsByDay: Record<number, boolean[]> = {};
+
+            statsSnapshot.docs.forEach((doc) => {
+              const stat = doc.data();
+              const problemId = stat.problemId;
+
+              const dayIndex = days.findIndex((d) => {
+                const dayNumber = parseInt(d.replace('D', ''));
+                return courseData?.days?.some(
+                  (day: any) => day.day === dayNumber && day.problems.includes(problemId)
+                );
+              });
+
+              if (dayIndex !== -1) {
+                if (!statsByDay[dayIndex]) statsByDay[dayIndex] = [];
+                statsByDay[dayIndex].push(stat.success);
+                totalAttempts += stat.executionCount || 0;
+                totalTime += stat.totalExecutionTime || 0;
+                if (stat.success) successCount++;
+              }
             });
 
-            if (dayIndex !== -1) {
-              if (!statsByDay[dayIndex]) statsByDay[dayIndex] = [];
-              statsByDay[dayIndex].push(stat.success);
-              totalAttempts += stat.executionCount || 0;
-              totalTime += stat.totalExecutionTime || 0;
-              if (stat.success) successCount++;
-            }
-          });
+            const progress = days.map((_, idx) => {
+              const statuses = statsByDay[idx] || [];
+              if (statuses.length === 0) return '';
+              const allTrue = statuses.every(Boolean);
+              const allFalse = statuses.every((s) => s === false);
+              if (allTrue) return '✓';
+              if (allFalse) return 'X';
+              return 'O';
+            });
 
-          const progress = days.map((_, idx) => {
-            const statuses = statsByDay[idx] || [];
-            if (statuses.length === 0) return '';
-            const allTrue = statuses.every(Boolean);
-            const allFalse = statuses.every((s) => s === false);
-            if (allTrue) return '✓';
-            if (allFalse) return 'X';
-            return 'O';
-          });
+            studentsData.push({
+              id: studentUID,
+              name,
+              email,
+              progress,
+              completionRate: (successCount / 6) * 100,
+              averageAttempts: statsSnapshot.size
+                ? (totalAttempts / statsSnapshot.size).toFixed(1)
+                : '0',
+              averageTime: statsSnapshot.size
+                ? (totalTime / statsSnapshot.size).toFixed(1)
+                : '0',
+            });
+          }
 
-          studentsData.push({
-            id: userId,
-            name,
-            email,
-            progress,
-            completionRate: (successCount / 6) * 100,
-            averageAttempts: statsSnapshot.size
-              ? (totalAttempts / statsSnapshot.size).toFixed(1)
-              : '0',
-            averageTime: statsSnapshot.size
-              ? (totalTime / statsSnapshot.size).toFixed(1)
-              : '0',
-          });
+          setStudents(studentsData);
+        } catch (error) {
+          console.error('Error cargando estudiantes:', error);
         }
-        setStudents(studentsData);
-      } catch (error) {
-        console.error('Error cargando estudiantes:', error);
+      };
+
+      if (days.length > 0) {
+        fetchStudents();
       }
-    };
-    if (days.length > 0) {
-      fetchStudents();
-    }
-  }, [generatedPassword, days]);
+    }, [generatedPassword, days]);
+
 
 
 
@@ -178,11 +195,12 @@ useEffect(() => {
   const toggleMetric = (metric: Metric) => setSelectedMetric(prev => prev === metric ? null : metric);
   const generatePassword = () => Math.random().toString(36).slice(-8);
 
-  const registerStudent = async () => {
+    const registerStudent = async () => {
     if (!formData.name || !formData.email || !formData.documentId) {
       alert('Todos los campos son obligatorios');
       return;
     }
+
     const password = generatePassword();
     try {
       const userCred = await createUserWithEmailAndPassword(secondaryAuth, formData.email, password);
@@ -208,14 +226,18 @@ useEffect(() => {
       });
 
       setGeneratedPassword(password);
-      setShowModal(false);
-      setFormData({ name: '', email: '', documentId: '' });
+      setRegistrationSuccess(true); // ✅ ahora sí mostramos mensaje
       navigator.clipboard.writeText(password);
-    } catch (err) {
+
+      setFormData({ name: '', email: '', documentId: '' });
+    } catch (err: any) {
       console.error(err);
       alert('Error al registrar estudiante');
+      setGeneratedPassword(null);
+      setRegistrationSuccess(false);
     }
   };
+
 
     const [problemId, setProblemId] = useState('');
     const [problemTitle, setProblemTitle] = useState('');
@@ -612,12 +634,30 @@ return (
             <input ref={nameInputRef} autoFocus={false} type="text" placeholder="Nombre completo" className="w-full p-2 border" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
             <input type="email" placeholder="Correo electrónico" className="w-full p-2 border" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
             <input type="text" placeholder="Cédula" className="w-full p-2 border" value={formData.documentId} onChange={e => setFormData({ ...formData, documentId: e.target.value })} />
-            {generatedPassword && (
-              <div className="bg-green-100 text-green-800 p-2 rounded text-sm flex items-center justify-between">
-                Contraseña asignada: <span className="font-mono">{generatedPassword}</span>
-                <button onClick={() => navigator.clipboard.writeText(generatedPassword)} title="Copiar contraseña"><FaCopy className="ml-2" /></button>
+              {registrationSuccess && generatedPassword && (
+              <div className="bg-green-100 text-green-800 p-3 rounded text-sm space-y-2">
+                <div className="font-bold">¡Correo registrado! Datos:</div>
+                <div className="flex items-center justify-between">
+                  <span className="font-mono">{formData.email}</span>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(formData.email)}
+                    title="Copiar correo"
+                  >
+                    <FaCopy className="ml-2 cursor-pointer hover:text-green-700" />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="font-mono">{generatedPassword}</span>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(generatedPassword)}
+                    title="Copiar contraseña"
+                  >
+                    <FaCopy className="ml-2 cursor-pointer hover:text-green-700" />
+                  </button>
+                </div>
               </div>
             )}
+
             <div className="flex justify-end gap-2 mt-4">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 bg-gray-300 rounded">Cancelar</button>
               <button onClick={registerStudent} className="px-4 py-2 bg-green-600 text-white rounded">Registrar</button>
