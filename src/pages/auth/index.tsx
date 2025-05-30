@@ -16,24 +16,28 @@ const AuthPage: React.FC = () => {
   const router = useRouter();
 
   useEffect(() => {
-    const redirectBasedOnRole = async () => {
-      if (user) {
-        const userRef = doc(firestore, "users", user.uid);
-        const userSnap = await getDoc(userRef);
-        const role = userSnap.data()?.role?.toLowerCase();
+     const redirectBasedOnRole = async () => {
+       if (user) {
+         const userRef = doc(firestore, "users", user.uid);
+         const userSnap = await getDoc(userRef);
+         const role = userSnap.data()?.role?.toLowerCase();
 
-        if (role === "profesor") {
+        if (role === "admin") {        
+          router.push("/adminview");
+        } else if (role === "profesor") {
           router.push("/teacherview");
-        } else {
+        } else if (role === "estudiante") {
           router.push("/home/studentview");
-        }
-      } else if (!loading && !user) {
-        setPageLoading(false);
-      }
-    };
+        } else {
+          router.push("/auth");
+       }
+       } else if (!loading && !user) {
+         setPageLoading(false);
+       }
+     };
 
-    redirectBasedOnRole();
-  }, [user, loading]);
+     redirectBasedOnRole();
+   }, [user, loading]);
 
   if (pageLoading) return null;
 
