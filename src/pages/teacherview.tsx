@@ -79,11 +79,9 @@ function TeacherView() {
     if (!loading) checkAccess();
   }, [user, loading, router]);
 
-  // Carga de estudiantes y estadísticas
-// ...todo el resto igual hasta el useEffect de estudiantes...
 
-  // Carga de estudiantes y estadísticas
-    useEffect(() => {
+ // Carga de estudiantes y estadísticas
+useEffect(() => {
     const fetchStudents = async () => {
       try {
         const usersSnapshot = await getDocs(collection(firestore, 'users'));
@@ -162,8 +160,12 @@ function TeacherView() {
         console.error('Error cargando estudiantes:', error);
       }
     };
-    fetchStudents();
-  }, [generatedPassword]);
+    if (days.length > 0) {
+      fetchStudents();
+    }
+  }, [generatedPassword, days]);
+
+
 
 
   // Cuando se abre el modal, enfocamos el input si no estamos en un iframe
