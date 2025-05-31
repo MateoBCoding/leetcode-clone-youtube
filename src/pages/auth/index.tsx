@@ -22,9 +22,7 @@ const AuthPage: React.FC = () => {
          const userSnap = await getDoc(userRef);
          const role = userSnap.data()?.role?.toLowerCase();
 
-        if (role === "admin") {        
-          router.push("/adminview");
-        } else if (role === "profesor") {
+        if (role === "profesor" || role === "admin"){
           router.push("/teacherview");
         } else if (role === "estudiante") {
           router.push("/home/studentview");
