@@ -8,7 +8,7 @@ interface AdminTabsProps {
 }
 
 const AdminTabs: React.FC<AdminTabsProps> = ({ adminView, onChange }) => (
-  <div className="bg-gray-800 p-4 flex space-x-2 mb-4">
+  <div className="p-4 flex space-x-2 mb-4">
     <button
       className={`px-4 py-2 rounded ${adminView === 'students' ? 'bg-green-600' : 'bg-gray-700'}`}
       onClick={() => onChange('students')}

@@ -71,18 +71,17 @@ export default function TeacherView() {
   const [searchText, setSearchText] = useState('');
 
   // ---------------------------------------------------
-  // Estados para el Modal de “Registrar Estudiante”
+  // Estados para el Modal de “Registrar Usuario”
   // ---------------------------------------------------
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    documentId: ''
+    documentId: '',
+    role: 'estudiante' as 'estudiante' | 'profesor' | 'admin'
   });
-  const [generatedPassword, setGeneratedPassword] = useState<string | null>(
-    null
-  );
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
 
   // ---------------------------------------------------
@@ -108,13 +107,13 @@ export default function TeacherView() {
   // 2) CARGA DE ESTUDIANTES Y PROGRESO + CÁLCULO MÉTRICAS
   // ---------------------------------------------------
   useEffect(() => {
-    if (!userRole) return;
+    if (!user || !userRole) return;
     (async () => {
       // 2.1) Obtener definición de “days” desde Firestore (courses)
       const courseSnap = await getDocs(collection(firestore, 'courses'));
       const daysArr: any[] = (
         courseSnap.docs[0]?.data().days || []
-      ).sort((a, b) => a.day - b.day);
+      ).sort((a: { day: number }, b: { day: number }) => a.day - b.day);
       const totalDays = daysArr.length;
 
       // 2.2) Obtener lista “linked” de estudiantes (si el usuario es profesor)
@@ -198,6 +197,7 @@ export default function TeacherView() {
   //  Funciones auxiliares
   // ------------------------------
   const isAdmin = userRole === 'admin';
+  const canRegister = userRole === 'profesor' || isAdmin;
   const toggleMetric = (m: Metric) =>
     setSelectedMetric(prev => (prev === m ? null : m));
   const toggleTeacher = (tid: string) =>
@@ -205,14 +205,13 @@ export default function TeacherView() {
       prev.includes(tid) ? prev.filter(x => x !== tid) : [...prev, tid]
     );
 
-  // Agrupar estudiantes por teacherId (para vista admin “Por profesores”)
   const byTeacher = students.reduce<Record<string, Student[]>>((acc, s) => {
     (acc[s.teacherId] ||= []).push(s);
     return acc;
   }, {});
 
   // ---------------------------------------------------
-  // 3) FUNCIONES DE REGISTRO DE ESTUDIANTE
+  // 3) FUNCIONES DE REGISTRO DE USUARIO
   // ---------------------------------------------------
   const generatePassword = () => Math.random().toString(36).slice(-8);
   const registerStudent = async () => {
@@ -226,6 +225,7 @@ export default function TeacherView() {
     }
     const password = generatePassword();
     try {
+      // Crear usuario con el rol seleccionado
       const cred = await createUserWithEmailAndPassword(
         secondaryAuth,
         formData.email,
@@ -237,26 +237,29 @@ export default function TeacherView() {
         email: formData.email,
         displayName: formData.name,
         documentId: formData.documentId,
-        role: 'estudiante',
+        role: formData.role,
         teacherId: user!.uid,
         createdAt: Date.now(),
         updatedAt: Date.now(),
         solvedProblems: [],
         likedProblems: [],
         dislikedProblems: [],
-        starredProblems: []
+        starredProblems: [],
+        students: []
       });
-      // Agregar student al array “students” del profesor actual
-      await updateDoc(doc(firestore, 'users', user!.uid), {
-        students: arrayUnion(uid)
-      });
+      // Si el nuevo rol es 'estudiante', agregar al array “students” del profesor actual
+      if (formData.role === 'estudiante') {
+        await updateDoc(doc(firestore, 'users', user!.uid), {
+          students: arrayUnion(uid)
+        });
+      }
       setGeneratedPassword(password);
       setRegistrationSuccess(true);
       navigator.clipboard.writeText(password);
-      setFormData({ name: '', email: '', documentId: '' });
+      setFormData({ name: '', email: '', documentId: '', role: 'estudiante' });
     } catch (e) {
       console.error(e);
-      alert('Error al registrar estudiante');
+      alert('Error al registrar usuario');
       setRegistrationSuccess(false);
     }
   };
@@ -275,16 +278,11 @@ export default function TeacherView() {
       {/* ====================== */}
       <Topbar />
 
-      <main className="flex-1 p-6 overflow-auto">
-        <h1 className="text-2xl font-bold mb-6">
-          Seguimiento de Progreso Estudiantil
-        </h1>
-
-        <div className="space-y-6">
-          {/* ====================== */}
-          {/*     CARD DE FILTROS     */}
-          {/* ====================== */}
-          <div className="bg-[#2a2a2a] border border-gray-700 rounded-lg">
+      <main className="flex-1 p-6 overflow-auto space-y-6">
+        {/* ====================== */}
+        {/*   CARD DE FILTROS      */}
+        {/* ====================== */}
+        <div className="bg-[#2a2a2a] border border-gray-700 rounded-lg">
             <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
               <h2 className="text-lg font-semibold">Filtros</h2>
               <button
@@ -305,14 +303,7 @@ export default function TeacherView() {
 
             {filtersOpen && (
               <div className="p-4 space-y-4">
-                {/* 4.1) Input de búsqueda por nombre */}
-                <input
-                  type="text"
-                  placeholder="Buscar estudiante..."
-                  className="w-full p-2 rounded bg-[#1e1e1e] border border-gray-600 text-white focus:outline-none"
-                  value={searchText}
-                  onChange={e => setSearchText(e.target.value)}
-                />
+                
 
                 {/* 4.2) Selector de Métricas */}
                 <MetricsFilter
@@ -328,234 +319,258 @@ export default function TeacherView() {
             )}
           </div>
 
+        {/* ====================== */}
+        {/*  CARD DE TABLA        */}
+        {/* ====================== */}
+        <div className="bg-[#2a2a2a] border border-gray-700 rounded-lg p-4 overflow-auto space-y-6">
+
           {/* ====================== */}
-          {/*     CARD DE TABLA      */}
+          {/*  Barra de búsqueda + Botones a la izquierda  */}
           {/* ====================== */}
-          <div className="bg-[#2a2a2a] border border-gray-700 rounded-lg p-4 overflow-auto">
-            {/* ---------------------------------------------------- */}
-            {/* Si no hay métrica activa → mostrar GRID por días  */}
-            {/* ---------------------------------------------------- */}
-            {selectedMetric === null && (
-              <>
-                {(!isAdmin || adminView === 'students') && (
-                  <>
+          <div className="flex items-center space-x-4">
+            {/* → Cada botón va aquí, alineado a la izquierda */}
+            {canRegister && (
+              <button
+                onClick={() => setShowModal(true)}
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+              >
+                Registrar Usuario
+              </button>
+            )}
+            <input
+              type="text"
+              placeholder="Buscar usuario..."
+              className="w-1/2 p-2 rounded bg-[#1e1e1e] border border-gray-600 text-white focus:outline-none"
+              value={searchText}
+              onChange={e => setSearchText(e.target.value)}
+            />
+          </div>
+
+          {/* ======================================================= */}
+          {/*   Si no hay métrica activa → mostrar GRID por días      */}
+          {/* ======================================================= */}
+          {selectedMetric === null && (
+            <>
+              {(!isAdmin || adminView === 'students') && (
+                <>
+                  <div
+                    className="grid border border-gray-700"
+                    style={{
+                      gridTemplateColumns: `200px repeat(${
+                        filteredByName[0]?.progress.length || 0
+                      }, 60px)`
+                    }}
+                  >
+                    <div className="p-2 font-bold border border-gray-700 bg-[#1e1e1e]">
+                      Nombre
+                    </div>
+                    {filteredByName[0]?.progress.map((_, i) => (
+                      <div
+                        key={i}
+                        className="p-2 font-bold border border-gray-700 text-center bg-[#1e1e1e]"
+                      >
+                        D{i + 1}
+                      </div>
+                    ))}
+                  </div>
+                  {filteredByName.map(s => (
                     <div
+                      key={s.id}
                       className="grid border border-gray-700"
                       style={{
                         gridTemplateColumns: `200px repeat(${
-                          filteredByName[0]?.progress.length || 0
+                          s.progress.length
                         }, 60px)`
                       }}
                     >
-                      <div className="p-2 font-bold border border-gray-700 bg-[#1e1e1e]">
-                        Nombre
+                      <div
+                        className="p-2 border border-gray-700 cursor-pointer hover:bg-[#333333] bg-[#1e1e1e]"
+                        onClick={() => setSelectedStudent(s)}
+                      >
+                        {s.name}
                       </div>
-                      {filteredByName[0]?.progress.map((_, i) => (
+                      {s.progress.map((v, j) => (
                         <div
-                          key={i}
-                          className="p-2 font-bold border border-gray-700 text-center bg-[#1e1e1e]"
+                          key={j}
+                          className="p-2 border border-gray-700 text-center bg-[#1e1e1e]"
                         >
-                          D{i + 1}
+                          {v === '✓' ? (
+                            <FaCheck className="text-green-400 inline" />
+                          ) : v === 'X' ? (
+                            <FaTimes className="text-red-400 inline" />
+                          ) : v === 'O' ? (
+                            <span className="text-yellow-400">O</span>
+                          ) : (
+                            <span className="text-gray-500">–</span>
+                          )}
                         </div>
                       ))}
                     </div>
-                    {filteredByName.map(s => (
+                  ))}
+                  {filteredByName.length === 0 && (
+                    <div className="mt-4 text-center text-gray-500">
+                      No hay usuarios que coincidan.
+                    </div>
+                  )}
+                </>
+              )}
+
+              {isAdmin && adminView === 'teachers' && (
+                <div className="space-y-4">
+                  {Object.entries(byTeacher).map(([tid, group]) => {
+                    const groupFiltered = group.filter(s =>
+                      s.name
+                        .toLowerCase()
+                        .includes(searchText.toLowerCase().trim())
+                    );
+                    return (
                       <div
-                        key={s.id}
-                        className="grid border border-gray-700"
-                        style={{
-                          gridTemplateColumns: `200px repeat(${
-                            s.progress.length
-                          }, 60px)`
-                        }}
+                        key={tid}
+                        className="border border-gray-700 rounded-lg overflow-hidden"
                       >
                         <div
-                          className="p-2 border border-gray-700 cursor-pointer hover:bg-[#333333] bg-[#1e1e1e]"
-                          onClick={() => setSelectedStudent(s)}
+                          className="p-3 bg-[#1e1e1e] cursor-pointer flex justify-between items-center"
+                          onClick={() => toggleTeacher(tid)}
                         >
-                          {s.name}
+                          <span>Profesor: {tid}</span>
+                          <span>
+                            {expandedTeachers.includes(tid) ? '▾' : '▸'}
+                          </span>
                         </div>
-                        {s.progress.map((v, j) => (
-                          <div
-                            key={j}
-                            className="p-2 border border-gray-700 text-center bg-[#1e1e1e]"
-                          >
-                            {v === '✓' ? (
-                              <FaCheck className="text-green-400 inline" />
-                            ) : v === 'X' ? (
-                              <FaTimes className="text-red-400 inline" />
-                            ) : v === 'O' ? (
-                              <span className="text-yellow-400">O</span>
-                            ) : (
-                              <span className="text-gray-500">–</span>
+                        {expandedTeachers.includes(tid) && (
+                          <div className="p-2 bg-[#2a2a2a]">
+                            {groupFiltered.map(s => (
+                              <div
+                                key={s.id}
+                                className="p-2 border-b border-gray-700 cursor-pointer hover:bg-[#333333]"
+                                onClick={() => setSelectedStudent(s)}
+                              >
+                                {s.name} – {s.email}
+                              </div>
+                            ))}
+                            {groupFiltered.length === 0 && (
+                              <div className="p-2 text-gray-500">
+                                No hay usuarios bajo este profesor que coincidan.
+                              </div>
                             )}
                           </div>
-                        ))}
+                        )}
                       </div>
-                    ))}
-                    {filteredByName.length === 0 && (
-                      <div className="mt-4 text-center text-gray-500">
-                        No hay estudiantes que coincidan.
-                      </div>
-                    )}
-                  </>
-                )}
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
 
-                {isAdmin && adminView === 'teachers' && (
-                  <div className="space-y-4">
-                    {Object.entries(byTeacher).map(([tid, group]) => {
-                      const groupFiltered = group.filter(s =>
-                        s.name.toLowerCase().includes(searchText.toLowerCase().trim())
-                      );
-                      return (
-                        <div
-                          key={tid}
-                          className="border border-gray-700 rounded-lg overflow-hidden"
-                        >
-                          <div
-                            className="p-3 bg-[#1e1e1e] cursor-pointer flex justify-between items-center"
-                            onClick={() => toggleTeacher(tid)}
-                          >
-                            <span>Profesor: {tid}</span>
-                            <span>
-                              {expandedTeachers.includes(tid) ? '▾' : '▸'}
-                            </span>
-                          </div>
-                          {expandedTeachers.includes(tid) && (
-                            <div className="p-2 bg-[#2a2a2a]">
-                              {groupFiltered.map(s => (
-                                <div
-                                  key={s.id}
-                                  className="p-2 border-b border-gray-700 cursor-pointer hover:bg-[#333333]"
-                                  onClick={() => setSelectedStudent(s)}
-                                >
-                                  {s.name} – {s.email}
-                                </div>
-                              ))}
-                              {groupFiltered.length === 0 && (
-                                <div className="p-2 text-gray-500">
-                                  No hay estudiantes bajo este profesor que coincidan.
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+          {/* ======================================================= */}
+          {/*   Si hay métrica activa → mostrar TABLA de métricas     */}
+          {/* ======================================================= */}
+          {selectedMetric === 'completion' && (
+            <div>
+              <div className="grid grid-cols-2 border border-gray-700">
+                <div className="p-2 font-bold border border-gray-700 bg-[#1e1e1e]">
+                  Nombre
+                </div>
+                <div className="p-2 font-bold border border-gray-700 bg-[#1e1e1e] text-center">
+                  % Completos
+                </div>
+              </div>
+              {filteredByName.map(s => (
+                <div
+                  key={s.id}
+                  className="grid grid-cols-2 border border-gray-700"
+                >
+                  <div
+                    className="p-2 border border-gray-700 cursor-pointer hover:bg-[#333333] bg-[#1e1e1e]"
+                    onClick={() => setSelectedStudent(s)}
+                  >
+                    {s.name}
                   </div>
-                )}
-              </>
-            )}
-
-            {/* ---------------------------------------------------- */}
-            {/* Si hay métrica activa → mostrar TABLA de métricas  */}
-            {/* ---------------------------------------------------- */}
-            {selectedMetric === 'completion' && (
-              <div>
-                <div className="grid grid-cols-2 border border-gray-700">
-                  <div className="p-2 font-bold border border-gray-700 bg-[#1e1e1e]">
-                    Nombre
-                  </div>
-                  <div className="p-2 font-bold border border-gray-700 bg-[#1e1e1e] text-center">
-                    % Completos
+                  <div className="p-2 border border-gray-700 text-center bg-[#1e1e1e]">
+                    {s.percentComplete}%
                   </div>
                 </div>
-                {filteredByName.map((s) => (
-                  <div
-                    key={s.id}
-                    className="grid grid-cols-2 border border-gray-700"
-                  >
-                    <div
-                      className="p-2 border border-gray-700 cursor-pointer hover:bg-[#333333] bg-[#1e1e1e]"
-                      onClick={() => setSelectedStudent(s)}
-                    >
-                      {s.name}
-                    </div>
-                    <div className="p-2 border border-gray-700 text-center bg-[#1e1e1e]">
-                      {s.percentComplete}%
-                    </div>
-                  </div>
-                ))}
-                {filteredByName.length === 0 && (
-                  <div className="mt-4 text-center text-gray-500">
-                    No hay estudiantes que coincidan.
-                  </div>
-                )}
-              </div>
-            )}
+              ))}
+              {filteredByName.length === 0 && (
+                <div className="mt-4 text-center text-gray-500">
+                  No hay usuarios que coincidan.
+                </div>
+              )}
+            </div>
+          )}
 
-            {selectedMetric === 'attempts' && (
-              <div>
-                <div className="grid grid-cols-2 border border-gray-700">
-                  <div className="p-2 font-bold border border-gray-700 bg-[#1e1e1e]">
-                    Nombre
+          {selectedMetric === 'attempts' && (
+            <div>
+              <div className="grid grid-cols-2 border border-gray-700">
+                <div className="p-2 font-bold border border-gray-700 bg-[#1e1e1e]">
+                  Nombre
+                </div>
+                <div className="p-2 font-bold border border-gray-700 bg-[#1e1e1e] text-center">
+                  Intentos Promedio
+                </div>
+              </div>
+              {filteredByName.map(s => (
+                <div
+                  key={s.id}
+                  className="grid grid-cols-2 border border-gray-700"
+                >
+                  <div
+                    className="p-2 border border-gray-700 cursor-pointer hover:bg-[#333333] bg-[#1e1e1e]"
+                    onClick={() => setSelectedStudent(s)}
+                  >
+                    {s.name}
                   </div>
-                  <div className="p-2 font-bold border border-gray-700 bg-[#1e1e1e] text-center">
-                    Intentos Promedio
+                  <div className="p-2 border border-gray-700 text-center bg-[#1e1e1e]">
+                    {s.attemptsAvg.toFixed(2)}
                   </div>
                 </div>
-                {filteredByName.map((s) => (
-                  <div
-                    key={s.id}
-                    className="grid grid-cols-2 border border-gray-700"
-                  >
-                    <div
-                      className="p-2 border border-gray-700 cursor-pointer hover:bg-[#333333] bg-[#1e1e1e]"
-                      onClick={() => setSelectedStudent(s)}
-                    >
-                      {s.name}
-                    </div>
-                    <div className="p-2 border border-gray-700 text-center bg-[#1e1e1e]">
-                      {s.attemptsAvg.toFixed(2)}
-                    </div>
-                  </div>
-                ))}
-                {filteredByName.length === 0 && (
-                  <div className="mt-4 text-center text-gray-500">
-                    No hay estudiantes que coincidan.
-                  </div>
-                )}
-              </div>
-            )}
+              ))}
+              {filteredByName.length === 0 && (
+                <div className="mt-4 text-center text-gray-500">
+                  No hay usuarios que coincidan.
+                </div>
+              )}
+            </div>
+          )}
 
-            {selectedMetric === 'time' && (
-              <div>
-                <div className="grid grid-cols-2 border border-gray-700">
-                  <div className="p-2 font-bold border border-gray-700 bg-[#1e1e1e]">
-                    Nombre
+          {selectedMetric === 'time' && (
+            <div>
+              <div className="grid grid-cols-2 border border-gray-700">
+                <div className="p-2 font-bold border border-gray-700 bg-[#1e1e1e]">
+                  Nombre
+                </div>
+                <div className="p-2 font-bold border border-gray-700 bg-[#1e1e1e] text-center">
+                  Tiempo Promedio (s)
+                </div>
+              </div>
+              {filteredByName.map(s => (
+                <div
+                  key={s.id}
+                  className="grid grid-cols-2 border border-gray-700"
+                >
+                  <div
+                    className="p-2 border border-gray-700 cursor-pointer hover:bg-[#333333] bg-[#1e1e1e]"
+                    onClick={() => setSelectedStudent(s)}
+                  >
+                    {s.name}
                   </div>
-                  <div className="p-2 font-bold border border-gray-700 bg-[#1e1e1e] text-center">
-                    Tiempo Promedio (s)
+                  <div className="p-2 border border-gray-700 text-center bg-[#1e1e1e]">
+                    {s.timeAvg.toFixed(2)}
                   </div>
                 </div>
-                {filteredByName.map((s) => (
-                  <div
-                    key={s.id}
-                    className="grid grid-cols-2 border border-gray-700"
-                  >
-                    <div
-                      className="p-2 border border-gray-700 cursor-pointer hover:bg-[#333333] bg-[#1e1e1e]"
-                      onClick={() => setSelectedStudent(s)}
-                    >
-                      {s.name}
-                    </div>
-                    <div className="p-2 border border-gray-700 text-center bg-[#1e1e1e]">
-                      {s.timeAvg.toFixed(2)}
-                    </div>
-                  </div>
-                ))}
-                {filteredByName.length === 0 && (
-                  <div className="mt-4 text-center text-gray-500">
-                    No hay estudiantes que coincidan.
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+              ))}
+              {filteredByName.length === 0 && (
+                <div className="mt-4 text-center text-gray-500">
+                  No hay usuarios que coincidan.
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ====================== */}
-        {/*    Drawer de detalles   */}
+        {/*    Drawer de detalles  */}
         {/* ====================== */}
         {selectedStudent && (
           <div className="fixed inset-y-0 right-0 w-80 bg-[#2a2a2a] border-l border-gray-700 p-4 overflow-auto">
@@ -564,62 +579,84 @@ export default function TeacherView() {
               uid={selectedStudent.id}
               progress={selectedStudent.progress}
               onClose={() => setSelectedStudent(null)}
+              day={null}
             />
           </div>
         )}
 
         {/* ====================== */}
-        {/*    Modal de registro     */}
+        {/*    Modal de registro   */}
         {/* ====================== */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-[#2a2a2a] rounded-lg p-6 w-96 space-y-4">
-              <h2 className="text-lg font-bold text-white">
-                Registrar Estudiante
-              </h2>
+            <div className="bg-white rounded-lg text-black p-6 w-96 space-y-4">
+              <h2 className="text-lg font-bold mb-4">Registrar Usuario</h2>
+
               <input
                 ref={nameInputRef}
                 type="text"
                 placeholder="Nombre completo"
-                className="w-full p-2 border border-gray-600 rounded bg-[#1e1e1e] text-white"
+                className="w-full p-2 border border-gray-400 rounded"
                 value={formData.name}
                 onChange={e =>
                   setFormData({ ...formData, name: e.target.value })
                 }
               />
+
               <input
                 type="email"
                 placeholder="Correo electrónico"
-                className="w-full p-2 border border-gray-600 rounded bg-[#1e1e1e] text-white"
+                className="w-full p-2 border border-gray-400 rounded"
                 value={formData.email}
                 onChange={e =>
                   setFormData({ ...formData, email: e.target.value })
                 }
               />
+
               <input
                 type="text"
                 placeholder="Cédula"
-                className="w-full p-2 border border-gray-600 rounded bg-[#1e1e1e] text-white"
+                className="w-full p-2 border border-gray-400 rounded"
                 value={formData.documentId}
                 onChange={e =>
                   setFormData({ ...formData, documentId: e.target.value })
                 }
               />
+
+              {/* Selector de rol: solo se muestra si el usuario es admin */}
+              {isAdmin && (
+                <select
+                  className="w-full p-2 border border-gray-400 rounded"
+                  value={formData.role}
+                  onChange={e =>
+                    setFormData({
+                      ...formData,
+                      role: e.target.value as
+                        | 'estudiante'
+                        | 'profesor'
+                        | 'admin'
+                    })
+                  }
+                >
+                  <option value="estudiante">Estudiante</option>
+                  <option value="profesor">Profesor</option>
+                  <option value="admin">Admin</option>
+                </select>
+              )}
+
               {registrationSuccess && generatedPassword && (
-                <div className="bg-green-700 text-white p-3 rounded space-y-2 text-sm">
-                  <div className="font-semibold">¡Estudiante registrado!</div>
-                  <div className="flex justify-between">
+                <div className="bg-green-100 text-green-800 p-3 rounded text-sm space-y-2">
+                  <div className="font-bold">¡Usuario registrado! Datos:</div>
+                  <div className="flex items-center justify-between">
                     <span className="font-mono">{formData.email}</span>
                     <button
-                      onClick={() =>
-                        navigator.clipboard.writeText(formData.email)
-                      }
+                      onClick={() => navigator.clipboard.writeText(formData.email)}
                       title="Copiar correo"
                     >
-                      <FaCopy className="text-white" />
+                      <FaCopy className="ml-2 cursor-pointer hover:text-green-700" />
                     </button>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex items-center justify-between">
                     <span className="font-mono">{generatedPassword}</span>
                     <button
                       onClick={() =>
@@ -627,21 +664,22 @@ export default function TeacherView() {
                       }
                       title="Copiar contraseña"
                     >
-                      <FaCopy className="text-white" />
+                      <FaCopy className="ml-2 cursor-pointer hover:text-green-700" />
                     </button>
                   </div>
                 </div>
               )}
-              <div className="flex justify-end space-x-2">
+
+              <div className="flex justify-end gap-2 mt-4">
                 <button
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 bg-gray-600 text-white rounded"
+                  className="px-4 py-2 bg-gray-300 text-black rounded"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={registerStudent}
-                  className="px-4 py-2 bg-green-600 text-white rounded"
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
                 >
                   Registrar
                 </button>
