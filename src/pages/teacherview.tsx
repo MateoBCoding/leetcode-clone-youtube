@@ -5,14 +5,15 @@ import {
   FaTimes,
   FaCopy,
   FaChevronUp,
-  FaChevronDown
+  FaChevronDown,
+  FaUpload,
 } from 'react-icons/fa';
 import { useRouter } from 'next/router';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { initializeApp, getApps } from 'firebase/app';
 import {
   getAuth as getAuthSecondary,
-  createUserWithEmailAndPassword
+  createUserWithEmailAndPassword,
 } from 'firebase/auth';
 import {
   collection,
@@ -23,7 +24,7 @@ import {
   getDoc,
   setDoc,
   updateDoc,
-  arrayUnion
+  arrayUnion,
 } from 'firebase/firestore';
 
 import Topbar from '@/components/Topbar/Topbar';
@@ -32,19 +33,22 @@ import AdminTabs, { AdminView } from '@/components/AdminTabs/AdminTabs';
 import { StudentDrawer } from '../pages/studentdrawer';
 import { firestore, auth, firebaseConfig } from '@/firebase/firebase';
 
+// Importar el modal de carga masiva
+import { BulkRegisterModal } from '@/components/BulkRegisterModal/BulkRegisterModal';
+
 interface Student {
   id: string;
   name: string;
   email: string;
-  progress: string[];          // ['✓', 'X', 'O', ...]
+  progress: string[]; // ['✓', 'X', 'O', ...]
   teacherId: string;
-  percentComplete: number;      // Porcentaje de días completados (0-100)
-  attemptsAvg: number;          // Promedio de intentos
-  timeAvg: number;              // Promedio de tiempo (segundos)
+  percentComplete: number; // Porcentaje de días completados (0-100)
+  attemptsAvg: number; // Promedio de intentos
+  timeAvg: number; // Promedio de tiempo (segundos)
 }
 
 const secondaryApp =
-  getApps().find(app => app.name === 'Secondary') ||
+  getApps().find((app) => app.name === 'Secondary') ||
   initializeApp(firebaseConfig, 'Secondary');
 const secondaryAuth = getAuthSecondary(secondaryApp);
 
@@ -79,10 +83,17 @@ export default function TeacherView() {
     name: '',
     email: '',
     documentId: '',
-    role: 'estudiante' as 'estudiante' | 'profesor' | 'admin'
+    role: 'estudiante' as 'estudiante' | 'profesor' | 'admin',
   });
-  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(
+    null
+  );
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
+
+  // ---------------------------------------------------
+  // NUEVO ESTADO: controlar si se muestra el modal de Carga Masiva
+  // ---------------------------------------------------
+  const [showBulkModal, setShowBulkModal] = useState(false);
 
   // ---------------------------------------------------
   // 1) CONTROL DE ACCESO Y ROL
@@ -144,14 +155,13 @@ export default function TeacherView() {
 
         // Construir arreglo para calcular progress por día
         const statsByDay: Record<number, boolean[]> = {};
-        statsSnap.docs.forEach(statDoc => {
+        statsSnap.docs.forEach((statDoc) => {
           const stat = statDoc.data();
-          // Suponemos que stat.attempts y stat.timeSpent existen
           sumAttempts += stat.attempts || 0;
           sumTime += stat.timeSpent || 0;
 
           // Calcular índice de día según day.problems
-          const idx = daysArr.findIndex(day =>
+          const idx = daysArr.findIndex((day) =>
             Array.isArray(day.problems) &&
             day.problems.includes(stat.problemId)
           );
@@ -165,12 +175,12 @@ export default function TeacherView() {
           const arr = statsByDay[i] || [];
           if (!arr.length) return '';
           if (arr.every(Boolean)) return '✓';
-          if (arr.every(v => !v)) return 'X';
+          if (arr.every((v) => !v)) return 'X';
           return 'O';
         });
 
         // 2.6) Calcular métricas por estudiante
-        const completedDays = progress.filter(v => v === '✓').length;
+        const completedDays = progress.filter((v) => v === '✓').length;
         const percentComplete = totalDays
           ? Math.round((completedDays / totalDays) * 100)
           : 0;
@@ -185,7 +195,7 @@ export default function TeacherView() {
           teacherId: data.teacherId || '',
           percentComplete,
           attemptsAvg,
-          timeAvg
+          timeAvg,
         });
       }
 
@@ -194,15 +204,15 @@ export default function TeacherView() {
   }, [userRole, user]);
 
   // ------------------------------
-  //  Funciones auxiliares
+  // Funciones auxiliares
   // ------------------------------
   const isAdmin = userRole === 'admin';
   const canRegister = userRole === 'profesor' || isAdmin;
   const toggleMetric = (m: Metric) =>
-    setSelectedMetric(prev => (prev === m ? null : m));
+    setSelectedMetric((prev) => (prev === m ? null : m));
   const toggleTeacher = (tid: string) =>
-    setExpandedTeachers(prev =>
-      prev.includes(tid) ? prev.filter(x => x !== tid) : [...prev, tid]
+    setExpandedTeachers((prev) =>
+      prev.includes(tid) ? prev.filter((x) => x !== tid) : [...prev, tid]
     );
 
   const byTeacher = students.reduce<Record<string, Student[]>>((acc, s) => {
@@ -211,7 +221,7 @@ export default function TeacherView() {
   }, {});
 
   // ---------------------------------------------------
-  // 3) FUNCIONES DE REGISTRO DE USUARIO
+  // 3) FUNCIONES DE REGISTRO DE USUARIO “UNO A UNO”
   // ---------------------------------------------------
   const generatePassword = () => Math.random().toString(36).slice(-8);
   const registerStudent = async () => {
@@ -245,12 +255,12 @@ export default function TeacherView() {
         likedProblems: [],
         dislikedProblems: [],
         starredProblems: [],
-        students: []
+        students: [],
       });
       // Si el nuevo rol es 'estudiante', agregar al array “students” del profesor actual
       if (formData.role === 'estudiante') {
         await updateDoc(doc(firestore, 'users', user!.uid), {
-          students: arrayUnion(uid)
+          students: arrayUnion(uid),
         });
       }
       setGeneratedPassword(password);
@@ -267,7 +277,7 @@ export default function TeacherView() {
   // ---------------------------------------------------
   // 4) FILTRADO “EN MEMORIA” POR searchText
   // ---------------------------------------------------
-  const filteredByName = students.filter(s =>
+  const filteredByName = students.filter((s) =>
     s.name.toLowerCase().includes(searchText.toLowerCase().trim())
   );
 
@@ -283,67 +293,75 @@ export default function TeacherView() {
         {/*   CARD DE FILTROS      */}
         {/* ====================== */}
         <div className="bg-[#2a2a2a] border border-gray-700 rounded-lg">
-            <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
-              <h2 className="text-lg font-semibold">Filtros</h2>
-              <button
-                onClick={() => setFiltersOpen(open => !open)}
-                className="h-8 w-28 flex items-center justify-center bg-[#333333] hover:bg-[#444444] rounded"
-              >
-                {filtersOpen ? (
-                  <>
-                    <FaChevronUp className="mr-2" /> Ocultar
-                  </>
-                ) : (
-                  <>
-                    <FaChevronDown className="mr-2" /> Filtros
-                  </>
-                )}
-              </button>
-            </div>
-
-            {filtersOpen && (
-              <div className="p-4 space-y-4">
-                
-
-                {/* 4.2) Selector de Métricas */}
-                <MetricsFilter
-                  selectedMetric={selectedMetric}
-                  onToggle={toggleMetric}
-                />
-
-                {/* 4.3) Pestañas Admin (solo si es admin) */}
-                {isAdmin && (
-                  <AdminTabs adminView={adminView} onChange={setAdminView} />
-                )}
-              </div>
-            )}
+          <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
+            <h2 className="text-lg font-semibold">Filtros</h2>
+            <button
+              onClick={() => setFiltersOpen((open) => !open)}
+              className="h-8 w-28 flex items-center justify-center bg-[#333333] hover:bg-[#444444] rounded"
+            >
+              {filtersOpen ? (
+                <>
+                  <FaChevronUp className="mr-2" /> Ocultar
+                </>
+              ) : (
+                <>
+                  <FaChevronDown className="mr-2" /> Filtros
+                </>
+              )}
+            </button>
           </div>
+
+          {filtersOpen && (
+            <div className="p-4 space-y-4">
+              {/* 4.1) Campo de búsqueda ya existe en el grid */}
+              {/* 4.2) Selector de Métricas */}
+              <MetricsFilter
+                selectedMetric={selectedMetric}
+                onToggle={toggleMetric}
+              />
+
+              {/* 4.3) Pestañas Admin (solo si es admin) */}
+              {isAdmin && <AdminTabs adminView={adminView} onChange={setAdminView} />}
+            </div>
+          )}
+        </div>
 
         {/* ====================== */}
         {/*  CARD DE TABLA        */}
         {/* ====================== */}
         <div className="bg-[#2a2a2a] border border-gray-700 rounded-lg p-4 overflow-auto space-y-6">
-
           {/* ====================== */}
-          {/*  Barra de búsqueda + Botones a la izquierda  */}
+          {/*  Barra de búsqueda + Botones  */}
           {/* ====================== */}
-          <div className="flex items-center space-x-4">
-            {/* → Cada botón va aquí, alineado a la izquierda */}
-            {canRegister && (
-              <button
-                onClick={() => setShowModal(true)}
-                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-              >
-                Registrar Usuario
-              </button>
-            )}
+          <div className="flex items-center justify-between">
             <input
               type="text"
               placeholder="Buscar usuario..."
               className="w-1/2 p-2 rounded bg-[#1e1e1e] border border-gray-600 text-white focus:outline-none"
               value={searchText}
-              onChange={e => setSearchText(e.target.value)}
+              onChange={(e) => setSearchText(e.target.value)}
             />
+            <div className="flex space-x-2">
+              {/* Botón para registrar uno a uno */}
+              {canRegister && (
+                <button
+                  onClick={() => setShowModal(true)}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                >
+                  Registrar Usuario
+                </button>
+              )}
+              {/* Botón para carga masiva */}
+              {canRegister && (
+                <button
+                  onClick={() => setShowBulkModal(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
+                >
+                  <FaUpload />
+                  Carga masiva
+                </button>
+              )}
+            </div>
           </div>
 
           {/* ======================================================= */}
@@ -358,7 +376,7 @@ export default function TeacherView() {
                     style={{
                       gridTemplateColumns: `200px repeat(${
                         filteredByName[0]?.progress.length || 0
-                      }, 60px)`
+                      }, 60px)`,
                     }}
                   >
                     <div className="p-2 font-bold border border-gray-700 bg-[#1e1e1e]">
@@ -373,14 +391,12 @@ export default function TeacherView() {
                       </div>
                     ))}
                   </div>
-                  {filteredByName.map(s => (
+                  {filteredByName.map((s) => (
                     <div
                       key={s.id}
                       className="grid border border-gray-700"
                       style={{
-                        gridTemplateColumns: `200px repeat(${
-                          s.progress.length
-                        }, 60px)`
+                        gridTemplateColumns: `200px repeat(${s.progress.length}, 60px)`,
                       }}
                     >
                       <div
@@ -418,7 +434,7 @@ export default function TeacherView() {
               {isAdmin && adminView === 'teachers' && (
                 <div className="space-y-4">
                   {Object.entries(byTeacher).map(([tid, group]) => {
-                    const groupFiltered = group.filter(s =>
+                    const groupFiltered = group.filter((s) =>
                       s.name
                         .toLowerCase()
                         .includes(searchText.toLowerCase().trim())
@@ -433,13 +449,11 @@ export default function TeacherView() {
                           onClick={() => toggleTeacher(tid)}
                         >
                           <span>Profesor: {tid}</span>
-                          <span>
-                            {expandedTeachers.includes(tid) ? '▾' : '▸'}
-                          </span>
+                          <span>{expandedTeachers.includes(tid) ? '▾' : '▸'}</span>
                         </div>
                         {expandedTeachers.includes(tid) && (
                           <div className="p-2 bg-[#2a2a2a]">
-                            {groupFiltered.map(s => (
+                            {groupFiltered.map((s) => (
                               <div
                                 key={s.id}
                                 className="p-2 border-b border-gray-700 cursor-pointer hover:bg-[#333333]"
@@ -476,7 +490,7 @@ export default function TeacherView() {
                   % Completos
                 </div>
               </div>
-              {filteredByName.map(s => (
+              {filteredByName.map((s) => (
                 <div
                   key={s.id}
                   className="grid grid-cols-2 border border-gray-700"
@@ -510,7 +524,7 @@ export default function TeacherView() {
                   Intentos Promedio
                 </div>
               </div>
-              {filteredByName.map(s => (
+              {filteredByName.map((s) => (
                 <div
                   key={s.id}
                   className="grid grid-cols-2 border border-gray-700"
@@ -544,7 +558,7 @@ export default function TeacherView() {
                   Tiempo Promedio (s)
                 </div>
               </div>
-              {filteredByName.map(s => (
+              {filteredByName.map((s) => (
                 <div
                   key={s.id}
                   className="grid grid-cols-2 border border-gray-700"
@@ -598,7 +612,7 @@ export default function TeacherView() {
                 placeholder="Nombre completo"
                 className="w-full p-2 border border-gray-400 rounded"
                 value={formData.name}
-                onChange={e =>
+                onChange={(e) =>
                   setFormData({ ...formData, name: e.target.value })
                 }
               />
@@ -608,7 +622,7 @@ export default function TeacherView() {
                 placeholder="Correo electrónico"
                 className="w-full p-2 border border-gray-400 rounded"
                 value={formData.email}
-                onChange={e =>
+                onChange={(e) =>
                   setFormData({ ...formData, email: e.target.value })
                 }
               />
@@ -618,7 +632,7 @@ export default function TeacherView() {
                 placeholder="Cédula"
                 className="w-full p-2 border border-gray-400 rounded"
                 value={formData.documentId}
-                onChange={e =>
+                onChange={(e) =>
                   setFormData({ ...formData, documentId: e.target.value })
                 }
               />
@@ -628,13 +642,13 @@ export default function TeacherView() {
                 <select
                   className="w-full p-2 border border-gray-400 rounded"
                   value={formData.role}
-                  onChange={e =>
+                  onChange={(e) =>
                     setFormData({
                       ...formData,
                       role: e.target.value as
                         | 'estudiante'
                         | 'profesor'
-                        | 'admin'
+                        | 'admin',
                     })
                   }
                 >
@@ -686,6 +700,16 @@ export default function TeacherView() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ====================== */}
+        {/*  Modal de Carga Masiva  */}
+        {/* ====================== */}
+        {showBulkModal && user && (
+          <BulkRegisterModal
+            onClose={() => setShowBulkModal(false)}
+            currentTeacherUid={user.uid}
+          />
         )}
       </main>
     </div>
