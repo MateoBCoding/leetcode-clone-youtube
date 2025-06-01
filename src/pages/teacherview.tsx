@@ -299,7 +299,7 @@ export default function TeacherView() {
   // ---------------------------------------------------
   // 4) FUNCIONES DE REGISTRO DE EJERCICIO
   // ---------------------------------------------------
-  const registerExercise = async () => {
+    const registerExercise = async () => {
     if (
       !exerciseData.id.trim() ||
       !exerciseData.title.trim() ||
@@ -311,14 +311,44 @@ export default function TeacherView() {
     }
 
     try {
-      // 1. Guardar el ejercicio en la colección "problems"
-      const exerciseRef = doc(firestore, 'problems', exerciseData.id);
-      await setDoc(exerciseRef, {
-        ...exerciseData,
-        examples: exerciseData.examples,
-      });
+      // 1. Preparar la estructura exacta
+      const formattedExamples = exerciseData.examples.map((ex, idx) => ({
+        id: idx + 1,
+        inputText: ex.input,
+        outputText: ex.output,
+        explanation: ex.explanation,
+      }));
 
-      // 2. Obtener el curso (se asume que solo hay uno)
+      const formattedTestCases = exerciseData.examples.map((ex) => ({
+        input: ex.input,
+        output: ex.output,
+      }));
+
+      const exerciseFinal = {
+        id: exerciseData.id,
+        title: `${exerciseData.order}. ${exerciseData.title}`,
+        problemStatement: exerciseData.problemStatement,
+        outputText: exerciseData.outputText.trim(),
+        starterCode: exerciseData.starterCode,
+        starterFunctionName: exerciseData.starterFunctionName,
+        constraints: exerciseData.constraints,
+        difficulty: exerciseData.difficulty,
+        category: exerciseData.category,
+        inputText: exerciseData.examples[0]?.input || '',
+        examples: formattedExamples,
+        testCases: formattedTestCases,
+        link: exerciseData.link,
+        videoId: exerciseData.videoId,
+        order: exerciseData.order,
+        likes: NaN,
+        dislikes: NaN,
+      };
+
+      // 2. Guardar en la colección "problems"
+      const exerciseRef = doc(firestore, 'problems', exerciseData.id);
+      await setDoc(exerciseRef, exerciseFinal);
+
+      // 3. Obtener el curso (se asume que solo hay uno)
       const courseSnap = await getDocs(collection(firestore, 'courses'));
       if (courseSnap.empty) {
         alert('No existe documento de curso en Firestore');
@@ -330,7 +360,7 @@ export default function TeacherView() {
       const courseData = courseDoc.data();
       const currentDays = courseData.days || [];
 
-      // 3. Verificar si el día ya existe
+      // 4. Verificar si el día ya existe
       const dayIndex = currentDays.findIndex((d: any) => d.day === targetDay);
       if (dayIndex >= 0) {
         if (!currentDays[dayIndex].problems.includes(exerciseData.id)) {
@@ -343,10 +373,10 @@ export default function TeacherView() {
         });
       }
 
-      // 4. Actualizar el documento del curso
+      // 5. Actualizar el documento del curso
       await updateDoc(courseRef, { days: currentDays });
 
-      // 5. Limpiar estado y cerrar modal
+      // 6. Limpiar estado y cerrar modal
       setExerciseData({
         id: '',
         title: '',
@@ -371,6 +401,7 @@ export default function TeacherView() {
       alert('Hubo un error al registrar el ejercicio.');
     }
   };
+
 
   return (
     <div className="flex flex-col h-screen bg-[#1e1e1e] text-white">
@@ -908,8 +939,7 @@ export default function TeacherView() {
                 <div className="flex gap-4">
                   <div className="flex-1">
                     <label className="font-semibold">Dificultad</label>
-                    <input
-                      type="text"
+                    <select
                       className="w-full p-2 border"
                       value={exerciseData.difficulty}
                       onChange={(e) =>
@@ -918,8 +948,13 @@ export default function TeacherView() {
                           difficulty: e.target.value,
                         })
                       }
-                    />
+                    >
+                      <option value="Easy">Easy</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Hard">Hard</option>
+                    </select>
                   </div>
+
                   <div className="flex-1">
                     <label className="font-semibold">Categoría</label>
                     <input
@@ -976,13 +1011,19 @@ export default function TeacherView() {
                   }}
                 />
 
-                <label className="font-semibold">Día al que pertenece (1...)</label>
-                <input
-                  type="number"
+                <label className="font-semibold">Día al que pertenece</label>
+                <select
                   className="w-full p-2 border"
                   value={targetDay}
                   onChange={(e) => setTargetDay(Number(e.target.value))}
-                />
+                >
+                  {Array.from({ length: 21 }, (_, i) => i + 1).map((day) => (
+                    <option key={day} value={day}>
+                      Día {day}
+                    </option>
+                  ))}
+                </select>
+
               </div>
 
               <div className="flex justify-end gap-2 mt-4">
