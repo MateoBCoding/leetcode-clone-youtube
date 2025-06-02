@@ -155,7 +155,7 @@ const Sidebar: React.FC = () => {
             onClick={goToCourseEditor}
             className={`
               flex items-center gap-2 
-              bg-blue-600 hover:bg-blue-700 
+              bg-green-600 hover:bg-green-700  
               text-white px-3 py-2 rounded 
               transition-all
               ${sidebarOpen ? "w-full justify-start" : "w-12 justify-center"}

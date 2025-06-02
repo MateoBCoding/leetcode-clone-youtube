@@ -336,7 +336,6 @@ export default function TeacherView() {
         output: tc.output,
       }));
 
-      // 3. Construir el objeto final a subir a "problems"
       const exerciseFinal = {
         id: exerciseData.id,
         title: `${exerciseData.order}. ${exerciseData.title}`,
@@ -352,12 +351,11 @@ export default function TeacherView() {
         videoId: exerciseData.videoId,
         order: exerciseData.order,
       };
-
-      // 4. Guardar en la colección "problems"
       const exerciseRef = doc(firestore, "problems", exerciseData.id);
       await setDoc(exerciseRef, exerciseFinal);
 
-      // 5. Obtener el curso (se asume que sólo hay un documento en "courses")
+      // ─────────────────────────────────────────────────────────────
+      // 5) Obtener el documento del curso (solo hay uno en "courses")
       const courseSnap = await getDocs(collection(firestore, "courses"));
       if (courseSnap.empty) {
         alert("No existe documento de curso en Firestore");
@@ -367,25 +365,52 @@ export default function TeacherView() {
       const courseDoc = courseSnap.docs[0];
       const courseRef = courseDoc.ref;
       const courseData = courseDoc.data();
-      const currentDays = courseData.days || [];
 
-      // 6. Insertar el ID del ejercicio en el día correspondiente
-      const dayIndex = currentDays.findIndex((d: any) => d.day === targetDay);
-      if (dayIndex >= 0) {
-        if (!currentDays[dayIndex].problems.includes(exerciseData.id)) {
-          currentDays[dayIndex].problems.push(exerciseData.id);
+      // ─── 6) Convertir `courseData.days` (objeto) a un array ──────
+      // Si days no existe, tomamos un objeto vacío
+      const daysObj = (courseData.days as Record<string, { day: number; problems: string[] }>) || {};
+
+      // Object.values(daysObj) devuelve un array de { day: number, problems: string[] }
+      const daysArr: { day: number; problems: string[] }[] = Object.values(daysObj);
+
+      // (Opcional) Ordenar por la propiedad `.day` para mantener orden lógico
+      daysArr.sort((a, b) => a.day - b.day);
+
+      // ─── 7) Buscar si ya existe el día `targetDay` en daysArr ────
+      const existingIndex = daysArr.findIndex((d) => d.day === targetDay);
+
+      if (existingIndex >= 0) {
+        // El día ya existe: solo hay que agregar el ID del nuevo ejercicio
+        // **Pero antes**: asegúrate de no duplicar
+        const problemasDeEseDia = daysArr[existingIndex].problems;
+        if (!problemasDeEseDia.includes(exerciseData.id)) {
+          problemasDeEseDia.push(exerciseData.id);
         }
       } else {
-        currentDays.push({
+        // El día no existe: creamos un nuevo objeto y lo metemos al array
+        daysArr.push({
           day: targetDay,
           problems: [exerciseData.id],
         });
       }
 
-      // 7. Actualizar el documento del curso con el array "days"
-      await updateDoc(courseRef, { days: currentDays });
+      // ─── 8) (Opcional) Volver a ordenar por .day, en caso de que hayas agregado al final
+      daysArr.sort((a, b) => a.day - b.day);
 
-      // 8. Limpiar estado y cerrar modal
+      // ─── 9) Reconstruir el objeto/map para Firestore
+      // Por convención guardamos cada día en una “clave” igual a su índice en el array.
+      const updatedDaysObj: Record<string, { day: number; problems: string[] }> = {};
+      daysArr.forEach((d, idx) => {
+        updatedDaysObj[idx] = {
+          day: d.day,
+          problems: d.problems,
+        };
+      });
+
+      // ─── 10) Subir a Firestore: sobrescribir el campo `days` en el documento del curso
+      await updateDoc(courseRef, { days: updatedDaysObj });
+
+      // ─── Limpiar estado y cerrar modal
       setExerciseData({
         id: "",
         title: "",
