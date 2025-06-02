@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type Metric = 'completion' | 'attempts' | 'time' | null;
+export type Metric = 'completion' | 'attempts' | 'time' | 'points' | null;
 
 interface MetricsFilterProps {
   selectedMetric: Metric;
@@ -32,6 +32,15 @@ const MetricsFilter: React.FC<MetricsFilterProps> = ({ selectedMetric, onToggle 
       onClick={() => onToggle('time')}
     >
       ⏱ Tiempo
+    </button>
+
+     <button
+      className={`border p-4 text-center font-medium ${
+        selectedMetric === 'points' ? 'bg-white text-green-600 font-bold' : ''
+      }`}
+      onClick={() => onToggle('points')}
+    >
+      Puntos
     </button>
   </div>
 );

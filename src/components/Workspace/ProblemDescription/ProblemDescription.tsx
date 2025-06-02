@@ -181,34 +181,7 @@ const ProblemDescription: React.FC<ProblemDescriptionProps> = ({ problem, _solve
 										<BsCheck2Circle />
 									</div>
 								)}
-								<div
-									className='flex items-center cursor-pointer hover:bg-dark-fill-3 space-x-1 rounded p-[3px]  ml-4 text-lg transition-colors duration-200 text-dark-gray-6'
-									onClick={handleLike}
-								>
-									{liked && !updating && <AiFillLike className='text-dark-blue-s' />}
-									{!liked && !updating && <AiFillLike />}
-									{updating && <AiOutlineLoading3Quarters className='animate-spin' />}
 
-									<span className='text-xs'>{currentProblem.likes}</span>
-								</div>
-								<div
-									className='flex items-center cursor-pointer hover:bg-dark-fill-3 space-x-1 rounded p-[3px]  ml-4 text-lg transition-colors duration-200 text-green-s text-dark-gray-6'
-									onClick={handleDislike}
-								>
-									{disliked && !updating && <AiFillDislike className='text-dark-blue-s' />}
-									{!disliked && !updating && <AiFillDislike />}
-									{updating && <AiOutlineLoading3Quarters className='animate-spin' />}
-
-									<span className='text-xs'>{currentProblem.dislikes}</span>
-								</div>
-								<div
-									className='cursor-pointer hover:bg-dark-fill-3  rounded p-[3px]  ml-4 text-xl transition-colors duration-200 text-green-s text-dark-gray-6 '
-									onClick={handleStar}
-								>
-									{starred && !updating && <AiFillStar className='text-dark-yellow' />}
-									{!starred && !updating && <TiStarOutline />}
-									{updating && <AiOutlineLoading3Quarters className='animate-spin' />}
-								</div>
 							</div>
 						)}
 

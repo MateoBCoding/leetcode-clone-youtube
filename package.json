@@ -1,5 +1,5 @@
 {
-	"name": "leetcode-yt",
+	"name": "online-judge",
 	"version": "0.1.0",
 	"private": true,
 	"scripts": {
@@ -24,6 +24,7 @@
 		"next": "^13.2.4",
 		"papaparse": "^5.5.3",
 		"react": "^18.2.0",
+		"react-beautiful-dnd": "^13.1.1",
 		"react-confetti": "^6.1.0",
 		"react-dom": "^18.2.0",
 		"react-dropzone": "^14.3.8",
@@ -32,6 +33,7 @@
 		"react-split": "^2.0.14",
 		"react-toastify": "^9.1.2",
 		"react-youtube": "^10.1.0",
+		"recharts": "^2.15.3",
 		"recoil": "^0.7.7",
 		"typescript": "5.0.2"
 	},

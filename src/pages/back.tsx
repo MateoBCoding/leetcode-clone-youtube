@@ -31,22 +31,21 @@ import Topbar from '@/components/Topbar/Topbar';
 import MetricsFilter, { Metric } from '@/components/MetricsFilter/MetricsFilter';
 import AdminTabs, { AdminView } from '@/components/AdminTabs/AdminTabs';
 import { StudentDrawer } from '../pages/studentdrawer';
-import { firestore, auth, firebaseConfig } from '@/firebase/firebase';
-
-// Importar el modal de carga masiva
 import { BulkRegisterModal } from '@/components/BulkRegisterModal/BulkRegisterModal';
+import { firestore, auth, firebaseConfig } from '@/firebase/firebase';
 
 interface Student {
   id: string;
   name: string;
   email: string;
-  progress: string[]; // ['✓', 'X', 'O', ...]
+  progress: string[];          // ['✓', 'X', 'O', ...]
   teacherId: string;
-  percentComplete: number; // Porcentaje de días completados (0-100)
-  attemptsAvg: number; // Promedio de intentos
-  timeAvg: number; // Promedio de tiempo (segundos)
+  percentComplete: number;      // Porcentaje de días completados (0-100)
+  attemptsAvg: number;          // Promedio de intentos
+  timeAvg: number;              // Promedio de tiempo (segundos)
 }
 
+// Configuración de la app secundaria para registrar usuarios sin cerrar sesión
 const secondaryApp =
   getApps().find((app) => app.name === 'Secondary') ||
   initializeApp(firebaseConfig, 'Secondary');
@@ -85,15 +84,35 @@ export default function TeacherView() {
     documentId: '',
     role: 'estudiante' as 'estudiante' | 'profesor' | 'admin',
   });
-  const [generatedPassword, setGeneratedPassword] = useState<string | null>(
-    null
-  );
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
 
   // ---------------------------------------------------
   // NUEVO ESTADO: controlar si se muestra el modal de Carga Masiva
   // ---------------------------------------------------
   const [showBulkModal, setShowBulkModal] = useState(false);
+
+  // ---------------------------------------------------
+  // Estados para el Modal de “Registrar Ejercicio”
+  // ---------------------------------------------------
+  const [showExerciseModal, setShowExerciseModal] = useState(false);
+  const [targetDay, setTargetDay] = useState<number>(1);
+  const [exerciseData, setExerciseData] = useState({
+    id: '',
+    title: '',
+    problemStatement: '',
+    outputText: '',
+    starterCode: '',
+    starterFunctionName: '',
+    constraints: '',
+    examples: [{ input: '', output: '', explanation: '' }],
+    difficulty: 'Easy',
+    category: '',
+    inputText: '',
+    order: 0,
+    link: '',
+    videoId: '',
+  });
 
   // ---------------------------------------------------
   // 1) CONTROL DE ACCESO Y ROL
@@ -162,8 +181,7 @@ export default function TeacherView() {
 
           // Calcular índice de día según day.problems
           const idx = daysArr.findIndex((day) =>
-            Array.isArray(day.problems) &&
-            day.problems.includes(stat.problemId)
+            Array.isArray(day.problems) && day.problems.includes(stat.problemId)
           );
           if (idx < 0) return;
           statsByDay[idx] ||= [];
@@ -220,6 +238,10 @@ export default function TeacherView() {
     return acc;
   }, {});
 
+  const filteredByName = students.filter((s) =>
+    s.name.toLowerCase().includes(searchText.toLowerCase().trim())
+  );
+
   // ---------------------------------------------------
   // 3) FUNCIONES DE REGISTRO DE USUARIO “UNO A UNO”
   // ---------------------------------------------------
@@ -275,11 +297,111 @@ export default function TeacherView() {
   };
 
   // ---------------------------------------------------
-  // 4) FILTRADO “EN MEMORIA” POR searchText
+  // 4) FUNCIONES DE REGISTRO DE EJERCICIO
   // ---------------------------------------------------
-  const filteredByName = students.filter((s) =>
-    s.name.toLowerCase().includes(searchText.toLowerCase().trim())
-  );
+    const registerExercise = async () => {
+    if (
+      !exerciseData.id.trim() ||
+      !exerciseData.title.trim() ||
+      !exerciseData.problemStatement.trim() ||
+      !exerciseData.outputText.trim()
+    ) {
+      alert('Todos los campos obligatorios deben estar llenos.');
+      return;
+    }
+
+    try {
+      // 1. Preparar la estructura exacta
+      const formattedExamples = exerciseData.examples.map((ex, idx) => ({
+        id: idx + 1,
+        inputText: ex.input,
+        outputText: ex.output,
+        explanation: ex.explanation,
+      }));
+
+      const formattedTestCases = exerciseData.examples.map((ex) => ({
+        input: ex.input,
+        output: ex.output,
+      }));
+
+      const exerciseFinal = {
+        id: exerciseData.id,
+        title: `${exerciseData.order}. ${exerciseData.title}`,
+        problemStatement: exerciseData.problemStatement,
+        outputText: exerciseData.outputText.trim(),
+        starterCode: exerciseData.starterCode,
+        starterFunctionName: exerciseData.starterFunctionName,
+        constraints: exerciseData.constraints,
+        difficulty: exerciseData.difficulty,
+        category: exerciseData.category,
+        inputText: exerciseData.examples[0]?.input || '',
+        examples: formattedExamples,
+        testCases: formattedTestCases,
+        link: exerciseData.link,
+        videoId: exerciseData.videoId,
+        order: exerciseData.order,
+        likes: NaN,
+        dislikes: NaN,
+      };
+
+      // 2. Guardar en la colección "problems"
+      const exerciseRef = doc(firestore, 'problems', exerciseData.id);
+      await setDoc(exerciseRef, exerciseFinal);
+
+      // 3. Obtener el curso (se asume que solo hay uno)
+      const courseSnap = await getDocs(collection(firestore, 'courses'));
+      if (courseSnap.empty) {
+        alert('No existe documento de curso en Firestore');
+        return;
+      }
+
+      const courseDoc = courseSnap.docs[0];
+      const courseRef = courseDoc.ref;
+      const courseData = courseDoc.data();
+      const currentDays = courseData.days || [];
+
+      // 4. Verificar si el día ya existe
+      const dayIndex = currentDays.findIndex((d: any) => d.day === targetDay);
+      if (dayIndex >= 0) {
+        if (!currentDays[dayIndex].problems.includes(exerciseData.id)) {
+          currentDays[dayIndex].problems.push(exerciseData.id);
+        }
+      } else {
+        currentDays.push({
+          day: targetDay,
+          problems: [exerciseData.id],
+        });
+      }
+
+      // 5. Actualizar el documento del curso
+      await updateDoc(courseRef, { days: currentDays });
+
+      // 6. Limpiar estado y cerrar modal
+      setExerciseData({
+        id: '',
+        title: '',
+        problemStatement: '',
+        outputText: '',
+        starterCode: '',
+        starterFunctionName: '',
+        constraints: '',
+        examples: [{ input: '', output: '', explanation: '' }],
+        difficulty: 'Easy',
+        category: '',
+        inputText: '',
+        order: 0,
+        link: '',
+        videoId: '',
+      });
+      setTargetDay(1);
+      setShowExerciseModal(false);
+      alert('Ejercicio registrado exitosamente');
+    } catch (error) {
+      console.error('Error al registrar ejercicio:', error);
+      alert('Hubo un error al registrar el ejercicio.');
+    }
+  };
+
 
   return (
     <div className="flex flex-col h-screen bg-[#1e1e1e] text-white">
@@ -313,14 +435,10 @@ export default function TeacherView() {
 
           {filtersOpen && (
             <div className="p-4 space-y-4">
-              {/* 4.1) Campo de búsqueda ya existe en el grid */}
-              {/* 4.2) Selector de Métricas */}
-              <MetricsFilter
-                selectedMetric={selectedMetric}
-                onToggle={toggleMetric}
-              />
+              {/* Selector de Métricas */}
+              <MetricsFilter selectedMetric={selectedMetric} onToggle={toggleMetric} />
 
-              {/* 4.3) Pestañas Admin (solo si es admin) */}
+              {/* Pestañas Admin (solo si es admin) */}
               {isAdmin && <AdminTabs adminView={adminView} onChange={setAdminView} />}
             </div>
           )}
@@ -351,11 +469,20 @@ export default function TeacherView() {
                   Registrar Usuario
                 </button>
               )}
+              {/* Botón para registrar ejercicio */}
+              {canRegister && (
+                <button
+                  onClick={() => setShowExerciseModal(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                >
+                  Registrar Ejercicio
+                </button>
+              )}
               {/* Botón para carga masiva */}
               {canRegister && (
                 <button
                   onClick={() => setShowBulkModal(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
+                  className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors flex items-center gap-1"
                 >
                   <FaUpload />
                   Carga masiva
@@ -645,10 +772,7 @@ export default function TeacherView() {
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      role: e.target.value as
-                        | 'estudiante'
-                        | 'profesor'
-                        | 'admin',
+                      role: e.target.value as 'estudiante' | 'profesor' | 'admin',
                     })
                   }
                 >
@@ -674,7 +798,7 @@ export default function TeacherView() {
                     <span className="font-mono">{generatedPassword}</span>
                     <button
                       onClick={() =>
-                        navigator.clipboard.writeText(generatedPassword)
+                        navigator.clipboard.writeText(generatedPassword!)
                       }
                       title="Copiar contraseña"
                     >
@@ -710,6 +834,214 @@ export default function TeacherView() {
             onClose={() => setShowBulkModal(false)}
             currentTeacherUid={user.uid}
           />
+        )}
+
+        {/* ====================== */}
+        {/*  Modal: Registrar Ejercicio   */}
+        {/* ====================== */}
+        {showExerciseModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg text-black p-6 w-[600px] space-y-4 max-h-[90vh] overflow-auto">
+              <h2 className="text-lg font-bold mb-4">Registrar Ejercicio</h2>
+
+              <div className="space-y-2">
+                <label className="font-semibold">ID del ejercicio</label>
+                <input
+                  type="text"
+                  className="w-full p-2 border"
+                  required
+                  value={exerciseData.id}
+                  onChange={(e) =>
+                    setExerciseData({ ...exerciseData, id: e.target.value })
+                  }
+                />
+
+                <label className="font-semibold">Título</label>
+                <input
+                  type="text"
+                  className="w-full p-2 border"
+                  required
+                  value={exerciseData.title}
+                  onChange={(e) =>
+                    setExerciseData({ ...exerciseData, title: e.target.value })
+                  }
+                />
+
+                <label className="font-semibold">Enunciado del problema</label>
+                <textarea
+                  className="w-full p-2 border"
+                  rows={3}
+                  required
+                  value={exerciseData.problemStatement}
+                  onChange={(e) =>
+                    setExerciseData({
+                      ...exerciseData,
+                      problemStatement: e.target.value,
+                    })
+                  }
+                />
+
+                <label className="font-semibold">
+                  Respuesta esperada (outputText)
+                </label>
+                <textarea
+                  className="w-full p-2 border"
+                  rows={2}
+                  required
+                  value={exerciseData.outputText}
+                  onChange={(e) =>
+                    setExerciseData({
+                      ...exerciseData,
+                      outputText: e.target.value,
+                    })
+                  }
+                />
+
+                <label className="font-semibold">Código base</label>
+                <textarea
+                  className="w-full p-2 border"
+                  rows={3}
+                  value={exerciseData.starterCode}
+                  onChange={(e) =>
+                    setExerciseData({
+                      ...exerciseData,
+                      starterCode: e.target.value,
+                    })
+                  }
+                />
+
+                <label className="font-semibold">Nombre de la función</label>
+                <input
+                  type="text"
+                  className="w-full p-2 border"
+                  value={exerciseData.starterFunctionName}
+                  onChange={(e) =>
+                    setExerciseData({
+                      ...exerciseData,
+                      starterFunctionName: e.target.value,
+                    })
+                  }
+                />
+
+                <label className="font-semibold">Restricciones (HTML)</label>
+                <textarea
+                  className="w-full p-2 border"
+                  rows={2}
+                  value={exerciseData.constraints}
+                  onChange={(e) =>
+                    setExerciseData({
+                      ...exerciseData,
+                      constraints: e.target.value,
+                    })
+                  }
+                />
+
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="font-semibold">Dificultad</label>
+                    <select
+                      className="w-full p-2 border"
+                      value={exerciseData.difficulty}
+                      onChange={(e) =>
+                        setExerciseData({
+                          ...exerciseData,
+                          difficulty: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="Easy">Easy</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Hard">Hard</option>
+                    </select>
+                  </div>
+
+                  <div className="flex-1">
+                    <label className="font-semibold">Categoría</label>
+                    <input
+                      type="text"
+                      className="w-full p-2 border"
+                      value={exerciseData.category}
+                      onChange={(e) =>
+                        setExerciseData({
+                          ...exerciseData,
+                          category: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <label className="font-semibold">Input del ejemplo</label>
+                <input
+                  type="text"
+                  className="w-full p-2 border"
+                  value={exerciseData.examples[0].input}
+                  onChange={(e) => {
+                    const updated = [...exerciseData.examples];
+                    updated[0].input = e.target.value;
+                    setExerciseData({
+                      ...exerciseData,
+                      examples: updated,
+                      inputText: e.target.value,
+                    });
+                  }}
+                />
+
+                <label className="font-semibold">Output del ejemplo</label>
+                <input
+                  type="text"
+                  className="w-full p-2 border"
+                  value={exerciseData.examples[0].output}
+                  onChange={(e) => {
+                    const updated = [...exerciseData.examples];
+                    updated[0].output = e.target.value;
+                    setExerciseData({ ...exerciseData, examples: updated });
+                  }}
+                />
+
+                <label className="font-semibold">Explicación del ejemplo</label>
+                <textarea
+                  className="w-full p-2 border"
+                  rows={2}
+                  value={exerciseData.examples[0].explanation}
+                  onChange={(e) => {
+                    const updated = [...exerciseData.examples];
+                    updated[0].explanation = e.target.value;
+                    setExerciseData({ ...exerciseData, examples: updated });
+                  }}
+                />
+
+                <label className="font-semibold">Día al que pertenece</label>
+                <select
+                  className="w-full p-2 border"
+                  value={targetDay}
+                  onChange={(e) => setTargetDay(Number(e.target.value))}
+                >
+                  {Array.from({ length: 21 }, (_, i) => i + 1).map((day) => (
+                    <option key={day} value={day}>
+                      Día {day}
+                    </option>
+                  ))}
+                </select>
+
+              </div>
+
+              <div className="flex justify-end gap-2 mt-4">
+                <button
+                  onClick={() => setShowExerciseModal(false)}
+                  className="px-4 py-2 bg-gray-300 text-black rounded"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={registerExercise}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                >
+                  Registrar Ejercicio
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </main>
     </div>
