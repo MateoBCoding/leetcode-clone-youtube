@@ -30,7 +30,7 @@ import {
 import Topbar from '@/components/Topbar/Topbar';
 import MetricsFilter, { Metric } from '@/components/MetricsFilter/MetricsFilter';
 import AdminTabs, { AdminView } from '@/components/AdminTabs/AdminTabs';
-import { StudentDrawer } from '../pages/studentdrawer';
+import { StudentDrawer } from '../components/StudentDrawer/studentdrawer';
 import { BulkRegisterModal } from '@/components/BulkRegisterModal/BulkRegisterModal';
 import { firestore, auth, firebaseConfig } from '@/firebase/firebase';
 
