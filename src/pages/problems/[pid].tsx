@@ -2,7 +2,6 @@ import Topbar from "@/components/Topbar/Topbar";
 import Workspace from "@/components/Workspace/Workspace";
 import useHasMounted from "@/hooks/useHasMounted";
 import { firestore } from "@/firebase/firebase";
-import { problems } from "@/utils/problems";
 import { Problem } from "@/utils/types/problem";
 import { doc, getDoc, getDocs, collection } from "firebase/firestore";
 import React from "react";
