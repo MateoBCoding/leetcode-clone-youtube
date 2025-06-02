@@ -125,14 +125,16 @@ export default function StudentView() {
 
   // ─── 4) Filtrar la lista de problemas a mostrar según el día seleccionado ──
   const filteredProblems: DBProblem[] =
-    selectedDay != null && course
-      ? // Buscar el Day cuyo campo .day === selectedDay,
-        // luego sacar su arreglo .problems (string[]) y convertirlos a DBProblem[]
+  selectedDay != null && course
+    ? (
         course.daysArr
           .find((d) => d.day === selectedDay)
-          ?.problems.map((pid) => problems.find((p) => p.id === pid))
+          ?.problems
+          .map((pid) => problems.find((p) => p.id === pid))
           .filter((p): p is DBProblem => !!p)
-      : [];
+      ) ?? []  // <-- si todo es undefined, devuelve []
+    : [];
+
 
   // ─── 5) Si la página no ha terminado de montar o aún no sabemos el rol, no mostrar nada ──
   if (!hasMounted || loading) return null;
