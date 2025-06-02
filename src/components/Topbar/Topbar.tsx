@@ -10,7 +10,7 @@ import {
   collection,
 } from "firebase/firestore";
 import Link from "next/link";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useAuthState } from "react-firebase-hooks/auth";
 import Logout from "../Buttons/Logout";
 import { useSetRecoilState } from "recoil";
@@ -40,6 +40,9 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage = false }) => {
   const [totalPoints, setTotalPoints] = useState<number>(0);
   const [loadingPoints, setLoadingPoints] = useState<boolean>(false);
 
+  // ───────── REFERENCIA PARA GUARDAR EL USUARIO ANTERIOR ─────────
+  const prevUserRef = useRef<typeof user>(user);
+
   // ───────── LEER EL ROL DEL USUARIO ─────────
   useEffect(() => {
     if (!user) {
@@ -61,14 +64,12 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage = false }) => {
 
   // ───────── CALCULAR “PUNTOS TOTALES” SOLO SI ES ESTUDIANTE ─────────
   useEffect(() => {
-    // Si no hay usuario o el rol aún no se resolvió, salimos
     if (!user || userRole !== "estudiante") {
       setTotalPoints(0);
       setLoadingPoints(false);
       return;
     }
 
-    // Si el rol es “estudiante”, consultamos sus puntos
     setLoadingPoints(true);
     (async () => {
       try {
@@ -92,6 +93,19 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage = false }) => {
       }
     })();
   }, [user, userRole]);
+
+  // ───────── EFECTO PARA REDIRECCIONAR TRAS LOGOUT ─────────
+  useEffect(() => {
+    const prevUser = prevUserRef.current;
+
+    // Si antes había usuario y ahora 'user' es null, significa que hizo logout
+    if (prevUser && !user) {
+      router.push("/auth"); // o la ruta que uses para la pantalla de login
+    }
+
+    // Actualizamos el ref para el siguiente render
+    prevUserRef.current = user;
+  }, [user, router]);
 
   return (
     <nav className="relative flex h-[50px] w-full shrink-0 items-center px-5 bg-green-600 text-white">

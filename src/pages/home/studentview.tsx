@@ -25,7 +25,7 @@ interface Day {
 interface Course {
   id: string;
   title: string;
-  // En lugar de Day[] aquí guardaremos el arreglo convertido desde el objeto de Firestore
+  // daysArr es un arreglo ordenado de objetos { day, problems }
   daysArr: Day[];
 }
 
@@ -34,8 +34,6 @@ export default function StudentView() {
   const [problems, setProblems] = useState<DBProblem[]>([]);
   const [solvedProblems, setSolvedProblems] = useState<string[]>([]);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
-
-  // Ahora `course` tendrá la forma { id: string, title: string, daysArr: Day[] }
   const [course, setCourse] = useState<Course | null>(null);
 
   const hasMounted = useHasMounted();
@@ -49,7 +47,6 @@ export default function StudentView() {
         const userRef = doc(firestore, "users", user.uid);
         const userSnap = await getDoc(userRef);
         const role = userSnap.data()?.role?.toLowerCase();
-
         if (role === "profesor") {
           router.push("/teacherview");
         }
@@ -90,17 +87,16 @@ export default function StudentView() {
         const docSnap = courseDocs.docs[0];
         const courseData = docSnap.data();
 
-        // ─── a) “days” viene como un objeto/map, no como un arreglo ────────
-        //     Ejemplo: { "0": { day: 1, problems: [...] }, "1": { day: 2, problems: [...] }, … }
+        // a) “days” viene como un objeto/map, no como un arreglo
         const daysObj = (courseData.days as Record<string, Day>) || {};
 
-        // ─── b) Convertir ese objeto a arreglo con Object.values() ─────────
+        // b) Convertir ese objeto a arreglo con Object.values()
         const daysArr: Day[] = Object.values(daysObj);
 
-        // ─── c) (Opcional) ordenar por “day” para asegurarnos que esté en orden ─
+        // c) Ordenar por “day” para asegurarnos el orden
         daysArr.sort((a, b) => a.day - b.day);
 
-        // ─── d) Finalmente guardarlo en estado junto al id y title ─────────
+        // d) Guardarlo en estado
         setCourse({
           id: docSnap.id,
           title: courseData.title,
@@ -114,29 +110,45 @@ export default function StudentView() {
     fetchCourse();
   }, [user]);
 
-  // ─── 3) Función que decide si un día está desbloqueado ─────────────────────
+  // ─── 3) Función que decide si un día (por índice en daysArr) está desbloqueado ───
+  //     Ignora los días que no tienen ejercicios (daysArr[i].problems.length === 0) y
+  //     busca hacia atrás el primer día con ejercicios para comprobar si está completado.
   const isDayUnlocked = (dayIndex: number): boolean => {
-    if (!course || !course.daysArr || dayIndex === 0) return true;
-    const prevDay = course.daysArr[dayIndex - 1];
-    if (!prevDay || !Array.isArray(prevDay.problems)) return false;
-    // Solo desbloquear si todos los problemas de prevDay están en solvedProblems
+    if (!course) return false;
+    // El primer día (índice 0) siempre está desbloqueado.
+    if (dayIndex === 0) return true;
+
+    // Buscar hacia atrás el primer día anterior que sí tenga ejercicios (problems.length > 0)
+    let prevIndex = dayIndex - 1;
+    while (prevIndex >= 0 && course.daysArr[prevIndex].problems.length === 0) {
+      prevIndex--;
+    }
+
+    // Si no encontramos un día anterior con problemas, entonces lo desbloqueamos (nada que completar antes)
+    if (prevIndex < 0) {
+      return true;
+    }
+
+    // Si sí existe un día con ejercicios, comprobar que todos sus problemas estén resueltos
+    const prevDay = course.daysArr[prevIndex];
     return prevDay.problems.every((pid) => solvedProblems.includes(pid));
   };
 
-  // ─── 4) Filtrar la lista de problemas a mostrar según el día seleccionado ──
+  // ─── 4) Filtrar la lista de problemas a mostrar según el día seleccionado ─────
+  // Encontramos primero el índice de `selectedDay` en `course.daysArr`.
+  const selectedIndex =
+    selectedDay !== null && course
+      ? course.daysArr.findIndex((d) => d.day === selectedDay)
+      : -1;
+
   const filteredProblems: DBProblem[] =
-  selectedDay != null && course
-    ? (
-        course.daysArr
-          .find((d) => d.day === selectedDay)
-          ?.problems
+    selectedIndex >= 0 && course
+      ? course.daysArr[selectedIndex].problems
           .map((pid) => problems.find((p) => p.id === pid))
           .filter((p): p is DBProblem => !!p)
-      ) ?? []  // <-- si todo es undefined, devuelve []
-    : [];
+      : [];
 
-
-  // ─── 5) Si la página no ha terminado de montar o aún no sabemos el rol, no mostrar nada ──
+  // ─── 5) Si la página no ha terminado de montar o aún no sabemos el rol, no mostrar nada ───
   if (!hasMounted || loading) return null;
 
   return (
@@ -150,12 +162,9 @@ export default function StudentView() {
 
       {/* ─── 6) Mostrar los indicadores de cada día ─────────────────────────────── */}
       <div className="flex justify-center flex-wrap gap-4 my-8">
-        {/*
-          Antes hacías: {course?.days.map(...)} 
-          Ahora debes iterar sobre course.daysArr (que SÍ es un array).
-        */}
         {course?.daysArr.map((dayObj, index) => {
           const unlocked = isDayUnlocked(index);
+
           return (
             <div
               key={dayObj.day}
@@ -177,13 +186,12 @@ export default function StudentView() {
         })}
       </div>
 
-      {/*
-        ─── 7) Si ya seleccionó un día y está desbloqueado, mostrar la tabla ──────
-        Verificamos isDayUnlocked(selectedDay - 1) porque para ver los problemas
-        del “Día N” debemos comprobar que “Día N-1” esté completado.
-      */}
-      {selectedDay !== null &&
-        isDayUnlocked(selectedDay - 1) &&
+      {/* ─── 7) Mostrar la tabla de problemas sólo si:
+             a) Ya hay un día seleccionado (selectedIndex >= 0).
+             b) Ese día está desbloqueado (isDayUnlocked(selectedIndex)).
+             c) Y tiene al menos 1 problema en filteredProblems */}      
+      {selectedIndex >= 0 &&
+        isDayUnlocked(selectedIndex) &&
         filteredProblems.length > 0 && (
           <div className="relative overflow-x-auto mx-auto px-6 pb-10">
             {loadingProblems ? (
@@ -196,28 +204,16 @@ export default function StudentView() {
               <table className="text-sm text-left text-gray-500 dark:text-gray-400 sm:w-7/12 w-full max-w-[1200px] mx-auto">
                 <thead className="text-xs text-gray-700 uppercase dark:text-gray-400 border-b">
                   <tr>
-                    <th
-                      scope="col"
-                      className="px-1 py-3 w-0 font-medium"
-                    >
+                    <th scope="col" className="px-1 py-3 w-0 font-medium">
                       Status
                     </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 w-0 font-medium"
-                    >
+                    <th scope="col" className="px-6 py-3 w-0 font-medium">
                       Title
                     </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 w-0 font-medium"
-                    >
+                    <th scope="col" className="px-6 py-3 w-0 font-medium">
                       Difficulty
                     </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 w-0 font-medium"
-                    >
+                    <th scope="col" className="px-6 py-3 w-0 font-medium">
                       Category
                     </th>
                   </tr>

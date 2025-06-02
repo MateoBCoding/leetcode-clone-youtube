@@ -17,7 +17,7 @@ import {
 import { arrayMove, rectSortingStrategy, SortableContext } from "@dnd-kit/sortable";
 
 // Importar el componente que acabamos de crear
-import DayColumn from "@/pages/courses/[courseId]/DayColumn";
+import DayColumn from "@/components/DayColumn/DayColumn";
 
 // Importar el SortableItem para “Ejercicios Disponibles”
 import SortableItem from "@/components/SortableItem";
