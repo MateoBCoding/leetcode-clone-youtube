@@ -14,6 +14,7 @@ import useLocalStorage from "@/hooks/useLocalStorage";
 import { runJudge0Code } from "@/utils/Runner/judge0Runner";
 import { CheckCircle, XCircle } from "lucide-react";
 import { doc, getDoc, setDoc, updateDoc, increment, arrayUnion } from "firebase/firestore";
+import { calculatePoints } from "@/utils/calculatePoints";
 
 
 type PlaygroundProps = {
@@ -65,9 +66,9 @@ const Playground: React.FC<PlaygroundProps> = ({
     }
 
     try {
-      const testCases = problem.examples.map((ex) => ({
-        input: extractStdin(ex.inputText),
-        output: ex.outputText.trim(),
+      const testCases = problem.testCases.map((ex) => ({
+        input: extractStdin(ex.input),
+        output: ex.output.trim(),
       }));
 
       const results = await runJudge0Code(userCode, 63, testCases);
@@ -96,13 +97,21 @@ const Playground: React.FC<PlaygroundProps> = ({
 
         const statId = `${user.uid}_${pid}`;
         const statRef = doc(firestore, "user_problem_stats", statId);
+        const statSnap = await getDoc(statRef);
+        let oldExecutionCount = 0;
+        if (statSnap.exists() && statSnap.data()?.executionCount != null) {
+          oldExecutionCount = statSnap.data()!.executionCount as number;
+        }
+        const attempts = oldExecutionCount + 1;
 
+        const pointsEarned = calculatePoints(attempts, durationInSeconds);
         await updateDoc(statRef, {
           executionCount: increment(1),
           totalExecutionTime: increment(durationInSeconds),
           lastExecutionTime: durationInSeconds,
           lastSubmittedAt: submissionTime,
           success: true,
+          points: pointsEarned,
         });
 
         toast.success("✅ All test cases passed!", {
@@ -159,21 +168,22 @@ const Playground: React.FC<PlaygroundProps> = ({
   };
 
   if (user && pid) {
-  const statId = `${user.uid}_${pid}`;
-  const statRef = doc(firestore, "user_problem_stats", statId);
+    const statId = `${user.uid}_${pid}`;
+    const statRef = doc(firestore, "user_problem_stats", statId);
 
-  getDoc(statRef).then((docSnap) => {
-    if (!docSnap.exists()) {
-      setDoc(statRef, {
-        userId: user.uid,
-        problemId: pid,
-        executionCount: 0,
-        totalExecutionTime: 0,
-        lastExecutionTime: 0,
-        lastSubmittedAt: null,
-        success: false,
-      });
-    }
+    getDoc(statRef).then((docSnap) => {
+      if (!docSnap.exists()) {
+        setDoc(statRef, {
+          userId: user.uid,
+          problemId: pid,
+          executionCount: 0,
+          totalExecutionTime: 0,
+          lastExecutionTime: 0,
+          lastSubmittedAt: null,
+          success: false,
+          points: 0,
+        });
+      }
   });
 }
   return (
@@ -245,11 +255,11 @@ const Playground: React.FC<PlaygroundProps> = ({
           <div className="font-semibold my-4">
             <p className="text-sm font-medium mt-4 text-white">Input:</p>
             <div className="w-full cursor-text rounded-lg border px-3 py-[10px] bg-dark-fill-3 border-transparent text-white mt-2">
-              {problem.examples[activeTestCaseId].inputText}
+              {problem.testCases[activeTestCaseId].input}
             </div>
             <p className="text-sm font-medium mt-4 text-white">Output:</p>
             <div className="w-full cursor-text rounded-lg border px-3 py-[10px] bg-dark-fill-3 border-transparent text-white mt-2">
-              {problem.examples[activeTestCaseId].outputText}
+              {problem.testCases[activeTestCaseId].output}
             </div>
           </div>
         </div>

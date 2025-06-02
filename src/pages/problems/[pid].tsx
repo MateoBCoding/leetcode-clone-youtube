@@ -18,7 +18,7 @@ const ProblemPage: React.FC<ProblemPageProps> = ({ problem }) => {
 
 	return (
 		<div>
-			<Topbar problemPage />
+			<Topbar problemPage /> {/*gestion por componentes modificables en ejecucion */}
 			<Workspace problem={problem} />
 		</div>
 	);
