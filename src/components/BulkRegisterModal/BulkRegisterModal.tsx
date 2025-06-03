@@ -1,4 +1,3 @@
-// components/BulkRegisterModal.tsx
 import React, { useCallback, useState, useEffect } from 'react';
 import { FaDownload, FaTimes, FaUpload } from 'react-icons/fa';
 import { useDropzone } from 'react-dropzone';
@@ -41,7 +40,6 @@ export const BulkRegisterModal: React.FC<BulkRegisterModalProps> = ({
   const [logMessages, setLogMessages] = useState<string[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // 1) Generar y crear el enlace de descarga del template CSV
   useEffect(() => {
     const headers = ['name', 'email', 'documentId'];
     const exampleRow = ['Juan Pérez', 'juan@example.com', '12345678'];
@@ -55,7 +53,6 @@ export const BulkRegisterModal: React.FC<BulkRegisterModalProps> = ({
     };
   }, []);
 
-  // 2) Configurar react-dropzone
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       setUploadError(null);
@@ -85,7 +82,7 @@ export const BulkRegisterModal: React.FC<BulkRegisterModalProps> = ({
           const logs: string[] = [];
           for (let i = 0; i < data.length; i++) {
             const row = data[i];
-            const rowIndex = i + 2; // Primera fila = encabezados
+            const rowIndex = i + 2; 
             if (
               !row.name?.trim() ||
               !row.email?.trim() ||

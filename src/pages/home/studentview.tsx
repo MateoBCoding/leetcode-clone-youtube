@@ -1,5 +1,3 @@
-// src/pages/home/studentview.tsx
-
 import ProblemsTable from "@/components/ProblemsTable/ProblemsTable";
 import Topbar from "@/components/Topbar/Topbar";
 import useHasMounted from "@/hooks/useHasMounted";
@@ -25,7 +23,6 @@ interface Day {
 interface Course {
   id: string;
   title: string;
-  // daysArr es un arreglo ordenado de objetos { day, problems }
   daysArr: Day[];
 }
 
@@ -40,7 +37,6 @@ export default function StudentView() {
   const [user, loading] = useAuthState(auth);
   const router = useRouter();
 
-  // ─── 1) Si el usuario es profesor, redirige a /teacherview ────────────────
   useEffect(() => {
     if (!loading && user) {
       const fetchRoleAndRedirect = async () => {
@@ -55,7 +51,6 @@ export default function StudentView() {
     }
   }, [user, loading, router]);
 
-  // ─── 2) Cargar problemas, problemas resueltos y datos del curso ────────────
   useEffect(() => {
     const fetchProblems = async () => {
       const q = query(
@@ -87,16 +82,12 @@ export default function StudentView() {
         const docSnap = courseDocs.docs[0];
         const courseData = docSnap.data();
 
-        // a) “days” viene como un objeto/map, no como un arreglo
         const daysObj = (courseData.days as Record<string, Day>) || {};
 
-        // b) Convertir ese objeto a arreglo con Object.values()
         const daysArr: Day[] = Object.values(daysObj);
 
-        // c) Ordenar por “day” para asegurarnos el orden
         daysArr.sort((a, b) => a.day - b.day);
 
-        // d) Guardarlo en estado
         setCourse({
           id: docSnap.id,
           title: courseData.title,
@@ -110,32 +101,24 @@ export default function StudentView() {
     fetchCourse();
   }, [user]);
 
-  // ─── 3) Función que decide si un día (por índice en daysArr) está desbloqueado ───
-  //     Ignora los días que no tienen ejercicios (daysArr[i].problems.length === 0) y
-  //     busca hacia atrás el primer día con ejercicios para comprobar si está completado.
+
   const isDayUnlocked = (dayIndex: number): boolean => {
     if (!course) return false;
-    // El primer día (índice 0) siempre está desbloqueado.
     if (dayIndex === 0) return true;
 
-    // Buscar hacia atrás el primer día anterior que sí tenga ejercicios (problems.length > 0)
     let prevIndex = dayIndex - 1;
     while (prevIndex >= 0 && course.daysArr[prevIndex].problems.length === 0) {
       prevIndex--;
     }
 
-    // Si no encontramos un día anterior con problemas, entonces lo desbloqueamos (nada que completar antes)
     if (prevIndex < 0) {
       return true;
     }
 
-    // Si sí existe un día con ejercicios, comprobar que todos sus problemas estén resueltos
     const prevDay = course.daysArr[prevIndex];
     return prevDay.problems.every((pid) => solvedProblems.includes(pid));
   };
 
-  // ─── 4) Filtrar la lista de problemas a mostrar según el día seleccionado ─────
-  // Encontramos primero el índice de `selectedDay` en `course.daysArr`.
   const selectedIndex =
     selectedDay !== null && course
       ? course.daysArr.findIndex((d) => d.day === selectedDay)
@@ -148,19 +131,16 @@ export default function StudentView() {
           .filter((p): p is DBProblem => !!p)
       : [];
 
-  // ─── 5) Si la página no ha terminado de montar o aún no sabemos el rol, no mostrar nada ───
   if (!hasMounted || loading) return null;
 
   return (
     <main className="bg-dark-layer-2 min-h-screen relative">
       <Topbar />
 
-      {/* ─── Título ──────────────────────────────────────────────────────────────── */}
       <h1 className="text-2xl text-center text-gray-700 dark:text-gray-400 font-medium uppercase mt-10 mb-5">
         &ldquo; Rutina de Programación &rdquo; 👇
       </h1>
 
-      {/* ─── 6) Mostrar los indicadores de cada día ─────────────────────────────── */}
       <div className="flex justify-center flex-wrap gap-4 my-8">
         {course?.daysArr.map((dayObj, index) => {
           const unlocked = isDayUnlocked(index);
@@ -186,10 +166,7 @@ export default function StudentView() {
         })}
       </div>
 
-      {/* ─── 7) Mostrar la tabla de problemas sólo si:
-             a) Ya hay un día seleccionado (selectedIndex >= 0).
-             b) Ese día está desbloqueado (isDayUnlocked(selectedIndex)).
-             c) Y tiene al menos 1 problema en filteredProblems */}      
+     
       {selectedIndex >= 0 &&
         isDayUnlocked(selectedIndex) &&
         filteredProblems.length > 0 && (

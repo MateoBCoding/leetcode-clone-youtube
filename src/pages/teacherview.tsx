@@ -1,4 +1,3 @@
-// src/pages/TeacherView.tsx
 import React, { useState, useEffect, useRef } from "react";
 import {
   FaCheck,
@@ -41,15 +40,14 @@ interface Student {
   id: string;
   name: string;
   email: string;
-  progress: string[]; // ['✓', 'X', 'O', ...]
+  progress: string[]; 
   teacherId: string;
-  percentComplete: number; // Porcentaje de días completados (0-100)
-  attemptsAvg: number; // Promedio de intentos
-  timeAvg: number; // Promedio de tiempo (segundos)
+  percentComplete: number; 
+  attemptsAvg: number; 
+  timeAvg: number; 
   totalPoints: number;
 }
 
-// Configuración de la app secundaria para registrar usuarios sin cerrar sesión
 const secondaryApp =
   getApps().find((app) => app.name === "Secondary") ||
   initializeApp(firebaseConfig, "Secondary");
@@ -60,26 +58,17 @@ export default function TeacherView() {
   const [user, loading] = useAuthState(auth);
   const [userRole, setUserRole] = useState<string | null>(null);
 
-  // ------------------------------
-  // Datos principales
-  // ------------------------------
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [expandedTeachers, setExpandedTeachers] = useState<string[]>([]);
 
-  // ------------------------------
-  // Filtrado / Vistas
-  // ------------------------------
+
   const [adminView, setAdminView] = useState<AdminView>("students");
   const [selectedMetric, setSelectedMetric] = useState<Metric>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  // Nuevo estado: texto de búsqueda para filtrar por nombre
   const [searchText, setSearchText] = useState("");
 
-  // ---------------------------------------------------
-  // Estados para el Modals (“Registrar Usuario”, “Carga Masiva”, “Registrar Ejercicio”)
-  // ---------------------------------------------------
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
@@ -113,9 +102,7 @@ export default function TeacherView() {
     videoId: "",
   });
 
-  // ---------------------------------------------------
-  // 1) CONTROL DE ACCESO Y ROL
-  // ---------------------------------------------------
+
   useEffect(() => {
     if (loading) return;
     if (!user) {
@@ -132,33 +119,24 @@ export default function TeacherView() {
     })();
   }, [user, loading, router]);
 
-  // ---------------------------------------------------
-  // 2) CARGA DE ESTUDIANTES Y PROGRESO + CÁLCULO MÉTRICAS
-  // ---------------------------------------------------
+
   useEffect(() => {
     if (!user || !userRole) return;
     (async () => {
-      // 2.1) Obtener definición de “days” desde Firestore (courses)
      const courseSnap = await getDocs(collection(firestore, "courses"));
 
-      // 1) Extraer el objeto “days” (o poner {} si no existe)
       const daysObj = (courseSnap.docs[0]?.data().days as Record<string, any>) || {};
 
-      // 2) Convertir ese objeto en un arreglo de { day, problems }  
-      //    cada valor es algo como { day: 1, problems: ["two-sum", ...] }
       const daysArr: { day: number; problems: string[] }[] = Object.values(daysObj);
 
-      // 3) Ordenar por la propiedad “day”
       daysArr.sort((a, b) => a.day - b.day);
 
       const totalDays = daysArr.length;
 
 
-      // 2.2) Obtener lista “linked” de estudiantes (si el usuario es profesor)
       const mySnap = await getDoc(doc(firestore, "users", user!.uid));
       const linked: string[] = mySnap.data()?.students || [];
 
-      // 2.3) Recuperar todos los usuarios cuya role = 'estudiante'
       const usersSnap = await getDocs(collection(firestore, "users"));
       const listado: Student[] = [];
 
@@ -167,7 +145,6 @@ export default function TeacherView() {
         if (data.role !== "estudiante") continue;
         if (userRole === "profesor" && !linked.includes(d.id)) continue;
 
-        // 2.4) Para cada estudiante, consultar user_problem_stats
         const statsSnap = await getDocs(
           query(
             collection(firestore, "user_problem_stats"),
@@ -175,21 +152,18 @@ export default function TeacherView() {
           )
         );
 
-        // Acumular intentos, tiempo, y puntos
         let sumAttempts = 0;
         let sumTime = 0;
-        let sumPoints = 0; // ← NUEVO: acuñamos aquí la sumatoria de puntos
+        let sumPoints = 0; 
         let countStats = statsSnap.docs.length;
 
-        // Construir arreglo para calcular progress por día
         const statsByDay: Record<number, boolean[]> = {};
         statsSnap.docs.forEach((statDoc) => {
           const stat = statDoc.data();
           sumAttempts += stat.attempts || 0;
           sumTime += stat.timeSpent || 0;
-          sumPoints += stat.points || 0; // ← NUEVO: sumar los puntos de cada doc
+          sumPoints += stat.points || 0; 
 
-          // Calcular índice de día según day.problems
           const idx = daysArr.findIndex((day) =>
             Array.isArray(day.problems) && day.problems.includes(stat.problemId)
           );
@@ -198,7 +172,6 @@ export default function TeacherView() {
           statsByDay[idx].push(stat.success);
         });
 
-        // 2.5) Calcular “progress” por día
         const progress = daysArr.map((_, i) => {
           const arr = statsByDay[i] || [];
           if (!arr.length) return "";
@@ -207,7 +180,6 @@ export default function TeacherView() {
           return "O";
         });
 
-        // 2.6) Calcular métricas por estudiante
         const completedDays = progress.filter((v) => v === "✓").length;
         const percentComplete = totalDays
           ? Math.round((completedDays / totalDays) * 100)
@@ -224,7 +196,7 @@ export default function TeacherView() {
           percentComplete,
           attemptsAvg,
           timeAvg,
-          totalPoints: sumPoints, // ← asigno sumPoints
+          totalPoints: sumPoints, 
         });
       }
 
@@ -232,9 +204,7 @@ export default function TeacherView() {
     })();
   }, [userRole, user]);
 
-  // ------------------------------
-  // Funciones auxiliares
-  // ------------------------------
+
   const isAdmin = userRole === "admin";
   const canRegister = userRole === "profesor" || isAdmin;
   const toggleMetric = (m: Metric) =>
@@ -253,9 +223,6 @@ export default function TeacherView() {
     s.name.toLowerCase().includes(searchText.toLowerCase().trim())
   );
 
-  // ---------------------------------------------------
-  // 3) FUNCIONES DE REGISTRO DE USUARIO “UNO A UNO”
-  // ---------------------------------------------------
   const generatePassword = () => Math.random().toString(36).slice(-8);
   const registerStudent = async () => {
     if (
@@ -268,7 +235,6 @@ export default function TeacherView() {
     }
     const password = generatePassword();
     try {
-      // Crear usuario con el rol seleccionado
       const cred = await createUserWithEmailAndPassword(
         secondaryAuth,
         formData.email,
@@ -290,7 +256,6 @@ export default function TeacherView() {
         starredProblems: [],
         students: [],
       });
-      // Si el nuevo rol es 'estudiante', agregar al array “students” del profesor actual
       if (formData.role === "estudiante") {
         await updateDoc(doc(firestore, "users", user!.uid), {
           students: arrayUnion(uid),
@@ -307,9 +272,6 @@ export default function TeacherView() {
     }
   };
 
-  // ---------------------------------------------------
-  // 4) FUNCIONES DE REGISTRO DE EJERCICIO
-  // ---------------------------------------------------
   const registerExercise = async () => {
     if (
       !exerciseData.id.trim() ||
@@ -322,7 +284,6 @@ export default function TeacherView() {
     }
 
     try {
-      // 1. Mapear los "examples" con id, inputText, outputText y explicación
       const formattedExamples = exerciseData.examples.map((ex, idx) => ({
         id: idx + 1,
         inputText: ex.input,
@@ -330,7 +291,6 @@ export default function TeacherView() {
         explanation: ex.explanation,
       }));
 
-      // 2. Tomar testCases directamente del estado (solo input/output)
       const formattedTestCases = exerciseData.testCases.map((tc) => ({
         input: tc.input,
         output: tc.output,
@@ -354,8 +314,6 @@ export default function TeacherView() {
       const exerciseRef = doc(firestore, "problems", exerciseData.id);
       await setDoc(exerciseRef, exerciseFinal);
 
-      // ─────────────────────────────────────────────────────────────
-      // 5) Obtener el documento del curso (solo hay uno en "courses")
       const courseSnap = await getDocs(collection(firestore, "courses"));
       if (courseSnap.empty) {
         alert("No existe documento de curso en Firestore");
@@ -366,39 +324,27 @@ export default function TeacherView() {
       const courseRef = courseDoc.ref;
       const courseData = courseDoc.data();
 
-      // ─── 6) Convertir `courseData.days` (objeto) a un array ──────
-      // Si days no existe, tomamos un objeto vacío
       const daysObj = (courseData.days as Record<string, { day: number; problems: string[] }>) || {};
 
-      // Object.values(daysObj) devuelve un array de { day: number, problems: string[] }
       const daysArr: { day: number; problems: string[] }[] = Object.values(daysObj);
 
-      // (Opcional) Ordenar por la propiedad `.day` para mantener orden lógico
       daysArr.sort((a, b) => a.day - b.day);
 
-      // ─── 7) Buscar si ya existe el día `targetDay` en daysArr ────
       const existingIndex = daysArr.findIndex((d) => d.day === targetDay);
 
       if (existingIndex >= 0) {
-        // El día ya existe: solo hay que agregar el ID del nuevo ejercicio
-        // **Pero antes**: asegúrate de no duplicar
         const problemasDeEseDia = daysArr[existingIndex].problems;
         if (!problemasDeEseDia.includes(exerciseData.id)) {
           problemasDeEseDia.push(exerciseData.id);
         }
       } else {
-        // El día no existe: creamos un nuevo objeto y lo metemos al array
         daysArr.push({
           day: targetDay,
           problems: [exerciseData.id],
         });
       }
-
-      // ─── 8) (Opcional) Volver a ordenar por .day, en caso de que hayas agregado al final
       daysArr.sort((a, b) => a.day - b.day);
 
-      // ─── 9) Reconstruir el objeto/map para Firestore
-      // Por convención guardamos cada día en una “clave” igual a su índice en el array.
       const updatedDaysObj: Record<string, { day: number; problems: string[] }> = {};
       daysArr.forEach((d, idx) => {
         updatedDaysObj[idx] = {
@@ -407,10 +353,8 @@ export default function TeacherView() {
         };
       });
 
-      // ─── 10) Subir a Firestore: sobrescribir el campo `days` en el documento del curso
       await updateDoc(courseRef, { days: updatedDaysObj });
 
-      // ─── Limpiar estado y cerrar modal
       setExerciseData({
         id: "",
         title: "",
@@ -470,12 +414,10 @@ export default function TeacherView() {
 
             {filtersOpen && (
               <div className="p-4 space-y-4">
-                {/* Selector de Métricas */}
                 <MetricsFilter
                   selectedMetric={selectedMetric}
                   onToggle={toggleMetric}
                 />
-                {/* (AdminTabs se reemplaza por un dropdown en la sección de la tabla) */}
               </div>
             )}
           </div>
@@ -496,7 +438,6 @@ export default function TeacherView() {
                 onChange={(e) => setSearchText(e.target.value)}
               />
               <div className="flex space-x-2">
-                {/* Botón para registrar uno a uno */}
                 {canRegister && (
                   <button
                     onClick={() => setShowModal(true)}
@@ -505,7 +446,6 @@ export default function TeacherView() {
                     Registrar Usuario
                   </button>
                 )}
-                {/* Botón para registrar ejercicio */}
                 {isAdmin && (
                   <button
                     onClick={() => setShowExerciseModal(true)}
@@ -514,7 +454,6 @@ export default function TeacherView() {
                     Registrar Ejercicio
                   </button>
                 )}
-                {/* Botón para carga masiva */}
                 {canRegister && (
                   <button
                     onClick={() => setShowBulkModal(true)}
@@ -782,7 +721,6 @@ export default function TeacherView() {
                 <h3 className="text-lg font-semibold mb-4 text-white">
                   Ranking por Puntos
                 </h3>
-                {/* Pasamos al componente StudentRankingChart los datos: nombre y totalPoints */}
                 <StudentRankingChart
                   data={filteredByName.map((s) => ({
                     name: s.name,
@@ -866,7 +804,6 @@ export default function TeacherView() {
                   }
                 />
 
-                {/* Selector de rol: solo se muestra si el usuario es admin */}
                 {isAdmin && (
                   <select
                     className="w-full p-2 border border-gray-400 rounded"

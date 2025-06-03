@@ -21,7 +21,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ setSettings, settings }) 
 		<div className='text-white z-40'>
 			<div aria-modal='true' role='dialog' className='fixed inset-0 overflow-y-auto z-modal'>
 				<div className='flex min-h-screen items-center justify-center px-4'>
-					{/* overlay */}
 					<div
 						className='opacity-100'
 						onClick={() => setSettings({ ...settings, settingsModalIsOpen: false })}
@@ -30,7 +29,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ setSettings, settings }) 
 					</div>
 
 					<div className='my-8 inline-block min-w-full transform rounded-[13px] text-left transition-all bg-overlay-3 md:min-w-[420px] shadow-level4 shadow-lg p-0 bg-[rgb(40,40,40)] w-[600px] !overflow-visible opacity-100 scale-100'>
-						{/* setting header */}
 						<div className='flex items-center border-b px-5 py-4 text-lg font-medium  border-dark-divider-border-2'>
 							Settings
 							<button
@@ -59,7 +57,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ setSettings, settings }) 
 											{fontSize}
 											<BsChevronDown />
 										</button>
-										{/* Show dropdown for fontsizes */}
 										{settings.dropdownIsOpen && (
 											<ul
 												className='absolute mt-1 max-h-56 overflow-auto rounded-lg p-2 z-50 focus:outline-none shadow-lg   w-full bg-dark-layer-1'

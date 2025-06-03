@@ -1,5 +1,3 @@
-// src/components/Topbar/Topbar.tsx
-
 import { auth, firestore } from "@/firebase/firebase";
 import {
   doc,
@@ -17,16 +15,11 @@ import { useSetRecoilState } from "recoil";
 import { authModalState } from "@/atoms/authModalAtom";
 import Image from "next/image";
 
-// Íconos y router
 import { FaChevronLeft, FaChevronRight } from "react-icons/fa";
 import { BsList } from "react-icons/bs";
 import { useRouter } from "next/router";
 
 type TopbarProps = {
-  /**
-   * Si estás en una página de problemas y quieres mostrar
-   * las flechas y “Problem List”, envía `problemPage={true}`.
-   */
   problemPage?: boolean;
 };
 
@@ -35,15 +28,12 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage = false }) => {
   const setAuthModalState = useSetRecoilState(authModalState);
   const router = useRouter();
 
-  // ───────── ESTADO ROL Y PUNTOS ─────────
   const [userRole, setUserRole] = useState<string | null>(null);
   const [totalPoints, setTotalPoints] = useState<number>(0);
   const [loadingPoints, setLoadingPoints] = useState<boolean>(false);
 
-  // ───────── REFERENCIA PARA GUARDAR EL USUARIO ANTERIOR ─────────
   const prevUserRef = useRef<typeof user>(user);
 
-  // ───────── LEER EL ROL DEL USUARIO ─────────
   useEffect(() => {
     if (!user) {
       setUserRole(null);
@@ -62,7 +52,6 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage = false }) => {
     })();
   }, [user]);
 
-  // ───────── CALCULAR “PUNTOS TOTALES” SOLO SI ES ESTUDIANTE ─────────
   useEffect(() => {
     if (!user || userRole !== "estudiante") {
       setTotalPoints(0);
@@ -94,26 +83,23 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage = false }) => {
     })();
   }, [user, userRole]);
 
-  // ───────── EFECTO PARA REDIRECCIONAR TRAS LOGOUT ─────────
+
   useEffect(() => {
     const prevUser = prevUserRef.current;
 
-    // Si antes había usuario y ahora 'user' es null, significa que hizo logout
+
     if (prevUser && !user) {
-      router.push("/auth"); // o la ruta que uses para la pantalla de login
+      router.push("/auth"); 
     }
 
-    // Actualizamos el ref para el siguiente render
     prevUserRef.current = user;
   }, [user, router]);
 
   return (
     <nav className="relative flex h-[50px] w-full shrink-0 items-center px-5 bg-green-600 text-white">
       <div className="flex w-full items-center justify-between">
-        {/* Espacio izquierdo (logo o link a home) */}
         <Link href="/" className="h-[22px] flex-1" />
 
-        {/* BLOQUE CENTRAL: “Problem List” */}
         {problemPage && (
           <div className="flex items-center gap-4 flex-1 justify-center">
             <Link
@@ -126,7 +112,6 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage = false }) => {
           </div>
         )}
 
-        {/* BLOQUE DERECHO: Sign In / Puntos (solo estudiantes) / Avatar / Logout */}
         <div className="flex items-center space-x-4 flex-1 justify-end">
           {!user && (
             <Link
@@ -147,7 +132,6 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage = false }) => {
 
           {user && (
             <>
-              {/* ─── Mostrar puntos solo si role === "estudiante" ─── */}
               {userRole === "estudiante" && (
                 <div className="flex flex-col items-end">
                   <span className="text-sm font-medium">
@@ -157,7 +141,6 @@ const Topbar: React.FC<TopbarProps> = ({ problemPage = false }) => {
                 </div>
               )}
 
-              {/* Avatar con tooltip */}
               <div className="cursor-pointer group relative">
                 <Image
                   src="/avatar.png"

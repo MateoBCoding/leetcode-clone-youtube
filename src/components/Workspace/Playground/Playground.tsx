@@ -1,12 +1,9 @@
-// ----------------------------------------------
-// src/components/Playground.tsx
-// ----------------------------------------------
 import { useState, useEffect } from "react";
 import PreferenceNav from "./PreferenceNav/PreferenceNav";
 import Split from "react-split";
 import CodeMirror from "@uiw/react-codemirror";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
-import { python } from "@codemirror/lang-python"; // Cambiado a Python
+import { python } from "@codemirror/lang-python"; 
 import EditorFooter from "./EditorFooter";
 import { Problem } from "@/utils/types/problem";
 import { useAuthState } from "react-firebase-hooks/auth";
@@ -59,7 +56,6 @@ const Playground: React.FC<PlaygroundProps> = ({
     query: { pid },
   } = useRouter();
 
-  // ─── Normalización de testCases ─────────────────────────────────────────────
   const rawTestCases = problem.testCases;
   const testCases: Array<{ input: string; output: string }> = Array.isArray(
     rawTestCases
@@ -77,15 +73,14 @@ const Playground: React.FC<PlaygroundProps> = ({
   const lines: string[] = [];
 
   while ((match = regex.exec(inputText)) !== null) {
-    const varName = match[1]; // ej. "nums" o "target"
-    const varValue = match[2]; // ej. "[2,7,11,15]" o "9"
+    const varName = match[1]; 
+    const varValue = match[2]; 
     lines.push(`${varName} = ${varValue}`);
   }
 
   return lines.join("\n");
 }
 
-  // ─── handleSubmit actualizado para Python ───────────────────────────────────
   const handleSubmit = async () => {
     if (!user) {
       toast.error("Please login to submit your code", {
@@ -101,41 +96,19 @@ const Playground: React.FC<PlaygroundProps> = ({
       let allPassed = true;
       let outputMsg = "";
 
-      // Iteramos sobre cada testCase, construimos el código Python completo y lo enviamos
       for (let i = 0; i < testCases.length; i++) {
         const ex = testCases[i];
 
-        // 1) Generamos las asignaciones en Python a partir de ex.input
-        //    Ejemplo: "nums = [2,7,11,15], target = 9"
-        //    -> "nums = [2,7,11,15]\ntarget = 9"
         const varDecl = generateVarDeclarations(ex.input.trim());
 
-        // 2) Concatenamos varDecl + código del usuario (en Python)
-        //    Por ejemplo, si el usuario escribió:
-        //      def twoSum(nums, target):
-        //          ...
-        //      print(twoSum(nums, target))
-        //    combinedCode contendrá:
-        //      nums = [2,7,11,15]
-        //      target = 9
-        //
-        //      def twoSum(nums, target):
-        //          ...
-        //      print(twoSum(nums, target))
         const combinedCode = `${varDecl}\n\n${userCode}`;
-
-        // 3) Llamamos a Judge0 pasándole este código. No usamos stdin en Python,
-        //    porque ya tenemos las variables definidas al inicio. Cambiamos el ID de
-        //    lenguaje a 71 (Python 3.x). En payload solo dejamos el expected para comparar.
         const singlePayload = [
           {
-            input: "", // no enviamos nada por stdin
+            input: "", 
             output: ex.output.trim(),
           },
         ];
-        // El segundo parámetro (71) es el ID de Python en Judge0
         const results = await runJudge0Code(combinedCode, 92, singlePayload);
-        // results es un array de tamaño 1 (solo un test por llamada)
         const res = results[0];
 
         const expected = ex.output.trim();

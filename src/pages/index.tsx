@@ -6,7 +6,7 @@ export default function RedirectToLogin() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/auth"); // redirige al login
+    router.replace("/auth");
   }, [router]);
 
   return null;

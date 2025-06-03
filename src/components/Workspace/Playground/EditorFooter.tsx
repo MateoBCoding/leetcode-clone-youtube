@@ -45,7 +45,6 @@ const EditorFooter: React.FC<EditorFooterProps> = ({ handleSubmit, consoleOutput
 			{consoleOpen && (
 				<div className='absolute bottom-[60px] left-0 w-full bg-black text-green-400 p-4 h-40 overflow-y-auto z-20 shadow-lg rounded-t-md'>
 					<p className='text-sm whitespace-pre-wrap'>{consoleOutput || "Console is empty..."}</p>
-					{/* Aquí puedes agregar logs dinámicos */}
 				</div>
 			)}
 		</>
