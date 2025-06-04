@@ -1,3 +1,5 @@
+// src/pages/StudentView.tsx
+
 import ProblemsTable from "@/components/ProblemsTable/ProblemsTable";
 import Topbar from "@/components/Topbar/Topbar";
 import useHasMounted from "@/hooks/useHasMounted";
@@ -37,6 +39,7 @@ export default function StudentView() {
   const [user, loading] = useAuthState(auth);
   const router = useRouter();
 
+  // Redirigir a /teacherview si el usuario es profesor
   useEffect(() => {
     if (!loading && user) {
       const fetchRoleAndRedirect = async () => {
@@ -51,6 +54,7 @@ export default function StudentView() {
     }
   }, [user, loading, router]);
 
+  // Cargar todos los problemas, los resueltos, y la información del curso
   useEffect(() => {
     const fetchProblems = async () => {
       const q = query(
@@ -83,9 +87,7 @@ export default function StudentView() {
         const courseData = docSnap.data();
 
         const daysObj = (courseData.days as Record<string, Day>) || {};
-
         const daysArr: Day[] = Object.values(daysObj);
-
         daysArr.sort((a, b) => a.day - b.day);
 
         setCourse({
@@ -101,7 +103,7 @@ export default function StudentView() {
     fetchCourse();
   }, [user]);
 
-
+  // Función para determinar si el día está desbloqueado
   const isDayUnlocked = (dayIndex: number): boolean => {
     if (!course) return false;
     if (dayIndex === 0) return true;
@@ -119,11 +121,13 @@ export default function StudentView() {
     return prevDay.problems.every((pid) => solvedProblems.includes(pid));
   };
 
+  // Índice dentro de daysArr para el día seleccionado
   const selectedIndex =
     selectedDay !== null && course
       ? course.daysArr.findIndex((d) => d.day === selectedDay)
       : -1;
 
+  // Filtrar los problemas para el día seleccionado
   const filteredProblems: DBProblem[] =
     selectedIndex >= 0 && course
       ? course.daysArr[selectedIndex].problems
@@ -133,40 +137,75 @@ export default function StudentView() {
 
   if (!hasMounted || loading) return null;
 
+  // Agrupar los días en semanas de 7 días cada una
+  const weekMap: Record<number, Day[]> = {};
+  if (course) {
+    course.daysArr.forEach((dayObj) => {
+      const weekIndex = Math.floor((dayObj.day - 1) / 7);
+      if (!weekMap[weekIndex]) {
+        weekMap[weekIndex] = [];
+      }
+      weekMap[weekIndex].push(dayObj);
+    });
+  }
+
   return (
     <main className="bg-dark-layer-2 min-h-screen relative">
       <Topbar />
 
       <h1 className="text-2xl text-center text-gray-700 dark:text-gray-400 font-medium uppercase mt-10 mb-5">
-        &ldquo; Rutina de Programación &rdquo; 👇
+        Rutina de Ejercicios de Programación
       </h1>
 
-      <div className="flex justify-center flex-wrap gap-4 my-8">
-        {course?.daysArr.map((dayObj, index) => {
-          const unlocked = isDayUnlocked(index);
+      {/*
+        Recorremos cada semana (clave numérica en weekMap) en orden creciente.
+        Cada sección es un flex en columna centrado, de modo que el texto "Semana X"
+        queda centrado sobre los círculos de los días.
+      */}
+      <div className="space-y-8 pt-6 w-full">
+        {Object.keys(weekMap)
+          .map((wk) => parseInt(wk, 10))
+          .sort((a, b) => a - b)
+          .map((weekIndex) => (
+            <section key={weekIndex} className="flex flex-col items-center">
+              <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-400 text-center mb-4">
+                Semana {weekIndex + 1}
+              </h2>
+              <div className="flex justify-center flex-wrap gap-4">
+                {weekMap[weekIndex].map((dayObj) => {
+                  const realIndex = course?.daysArr.findIndex(
+                    (d) => d.day === dayObj.day
+                  )!;
+                  const unlocked = isDayUnlocked(realIndex);
 
-          return (
-            <div
-              key={dayObj.day}
-              onClick={() =>
-                unlocked ? setSelectedDay(dayObj.day) : undefined
-              }
-              className={`
-                w-24 h-24 rounded-full flex items-center justify-center font-bold transition text-center
-                ${
-                  unlocked
-                    ? "bg-green-600 text-white cursor-pointer hover:scale-105"
-                    : "bg-gray-500 text-gray-300 cursor-not-allowed"
-                }
-              `}
-            >
-              Día {dayObj.day}
-            </div>
-          );
-        })}
+                  return (
+                    <div
+                      key={dayObj.day}
+                      onClick={() =>
+                        unlocked ? setSelectedDay(dayObj.day) : undefined
+                      }
+                      className={`
+                        w-24 h-24 rounded-full flex items-center justify-center font-bold transition text-center
+                        ${
+                          unlocked
+                            ? "bg-green-600 text-white cursor-pointer hover:scale-105"
+                            : "bg-gray-500 text-gray-300 cursor-not-allowed"
+                        }
+                      `}
+                    >
+                      Día {dayObj.day}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
       </div>
 
-     
+      {/*
+        Si hay un día seleccionado, está desbloqueado y tiene problemas,
+        se muestra la tabla con los problemas filtrados para ese día.
+      */}
       {selectedIndex >= 0 &&
         isDayUnlocked(selectedIndex) &&
         filteredProblems.length > 0 && (
@@ -207,7 +246,6 @@ export default function StudentView() {
   );
 }
 
-// ─── Componente auxiliar para mostrar “skeleton loading” ────────────────────
 const LoadingSkeleton = () => (
   <div className="flex items-center space-x-12 mt-4 px-6">
     <div className="w-6 h-6 shrink-0 rounded-full bg-dark-layer-1"></div>

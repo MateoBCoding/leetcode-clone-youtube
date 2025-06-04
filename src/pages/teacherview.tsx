@@ -1,31 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import {
-  FaCheck,
-  FaTimes,
-  FaCopy,
-  FaChevronUp,
-  FaChevronDown,
-  FaUpload,
-} from "react-icons/fa";
+import { FaCheck, FaTimes, FaCopy, FaChevronUp, FaChevronDown, FaUpload } from "react-icons/fa";
 import { useRouter } from "next/router";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { initializeApp, getApps } from "firebase/app";
-import {
-  getAuth as getAuthSecondary,
-  createUserWithEmailAndPassword,
-} from "firebase/auth";
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  arrayUnion,
-} from "firebase/firestore";
-
+import { getAuth as getAuthSecondary, createUserWithEmailAndPassword } from "firebase/auth";
+import { collection, getDocs, query, where, doc, getDoc, setDoc, updateDoc, arrayUnion } from "firebase/firestore";
 import Topbar from "@/components/Topbar/Topbar";
 import Sidebar from "@/components/Sidebar/Sidebar";
 import MetricsFilter, { Metric } from "@/components/MetricsFilter/MetricsFilter";
@@ -40,35 +19,28 @@ interface Student {
   id: string;
   name: string;
   email: string;
-  progress: string[]; 
+  progress: string[];
   teacherId: string;
-  percentComplete: number; 
-  attemptsAvg: number; 
-  timeAvg: number; 
+  percentComplete: number;
+  attemptsAvg: number;
+  timeAvg: number;
   totalPoints: number;
 }
 
-const secondaryApp =
-  getApps().find((app) => app.name === "Secondary") ||
-  initializeApp(firebaseConfig, "Secondary");
+const secondaryApp = getApps().find((app) => app.name === "Secondary") || initializeApp(firebaseConfig, "Secondary");
 const secondaryAuth = getAuthSecondary(secondaryApp);
 
 export default function TeacherView() {
   const router = useRouter();
   const [user, loading] = useAuthState(auth);
   const [userRole, setUserRole] = useState<string | null>(null);
-
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [expandedTeachers, setExpandedTeachers] = useState<string[]>([]);
-
-
   const [adminView, setAdminView] = useState<AdminView>("students");
   const [selectedMetric, setSelectedMetric] = useState<Metric>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
-
   const [searchText, setSearchText] = useState("");
-
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
@@ -79,9 +51,7 @@ export default function TeacherView() {
   });
   const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
-
   const [showBulkModal, setShowBulkModal] = useState(false);
-
   const [showExerciseModal, setShowExerciseModal] = useState(false);
   const [targetDay, setTargetDay] = useState<number>(1);
   const [exerciseData, setExerciseData] = useState({
@@ -102,7 +72,6 @@ export default function TeacherView() {
     videoId: "",
   });
 
-
   useEffect(() => {
     if (loading) return;
     if (!user) {
@@ -119,51 +88,40 @@ export default function TeacherView() {
     })();
   }, [user, loading, router]);
 
-
   useEffect(() => {
     if (!user || !userRole) return;
     (async () => {
-     const courseSnap = await getDocs(collection(firestore, "courses"));
-
+      const courseSnap = await getDocs(collection(firestore, "courses"));
       const daysObj = (courseSnap.docs[0]?.data().days as Record<string, any>) || {};
-
       const daysArr: { day: number; problems: string[] }[] = Object.values(daysObj);
-
       daysArr.sort((a, b) => a.day - b.day);
-
       const totalDays = daysArr.length;
-
-
       const mySnap = await getDoc(doc(firestore, "users", user!.uid));
       const linked: string[] = mySnap.data()?.students || [];
-
       const usersSnap = await getDocs(collection(firestore, "users"));
       const listado: Student[] = [];
-
       for (const d of usersSnap.docs) {
         const data = d.data();
         if (data.role !== "estudiante") continue;
         if (userRole === "profesor" && !linked.includes(d.id)) continue;
-
         const statsSnap = await getDocs(
           query(
             collection(firestore, "user_problem_stats"),
             where("userId", "==", d.id)
           )
         );
-
         let sumAttempts = 0;
         let sumTime = 0;
-        let sumPoints = 0; 
-        let countStats = statsSnap.docs.length;
-
+        let sumPoints = 0;
         const statsByDay: Record<number, boolean[]> = {};
         statsSnap.docs.forEach((statDoc) => {
-          const stat = statDoc.data();
-          sumAttempts += stat.attempts || 0;
-          sumTime += stat.timeSpent || 0;
-          sumPoints += stat.points || 0; 
-
+          const stat = statDoc.data() as any;
+          const attemptsField = stat.executionCount ?? 0;
+          const timeField = stat.totalExecutionTime ?? 0;
+          const pointsField = stat.points ?? 0;
+          sumAttempts += attemptsField;
+          sumTime += timeField;
+          sumPoints += pointsField;
           const idx = daysArr.findIndex((day) =>
             Array.isArray(day.problems) && day.problems.includes(stat.problemId)
           );
@@ -171,7 +129,6 @@ export default function TeacherView() {
           statsByDay[idx] ||= [];
           statsByDay[idx].push(stat.success);
         });
-
         const progress = daysArr.map((_, i) => {
           const arr = statsByDay[i] || [];
           if (!arr.length) return "";
@@ -179,14 +136,13 @@ export default function TeacherView() {
           if (arr.every((v) => !v)) return "X";
           return "O";
         });
-
         const completedDays = progress.filter((v) => v === "✓").length;
         const percentComplete = totalDays
           ? Math.round((completedDays / totalDays) * 100)
           : 0;
+        const countStats = statsSnap.docs.length;
         const attemptsAvg = countStats ? sumAttempts / countStats : 0;
         const timeAvg = countStats ? sumTime / countStats : 0;
-
         listado.push({
           id: d.id,
           name: data.displayName || "Sin nombre",
@@ -196,19 +152,16 @@ export default function TeacherView() {
           percentComplete,
           attemptsAvg,
           timeAvg,
-          totalPoints: sumPoints, 
+          totalPoints: sumPoints,
         });
       }
-
       setStudents(listado);
     })();
   }, [userRole, user]);
 
-
   const isAdmin = userRole === "admin";
   const canRegister = userRole === "profesor" || isAdmin;
-  const toggleMetric = (m: Metric) =>
-    setSelectedMetric((prev) => (prev === m ? null : m));
+  const toggleMetric = (m: Metric) => setSelectedMetric((prev) => (prev === m ? null : m));
   const toggleTeacher = (tid: string) =>
     setExpandedTeachers((prev) =>
       prev.includes(tid) ? prev.filter((x) => x !== tid) : [...prev, tid]
@@ -225,21 +178,13 @@ export default function TeacherView() {
 
   const generatePassword = () => Math.random().toString(36).slice(-8);
   const registerStudent = async () => {
-    if (
-      !formData.name.trim() ||
-      !formData.email.trim() ||
-      !formData.documentId.trim()
-    ) {
+    if (!formData.name.trim() || !formData.email.trim() || !formData.documentId.trim()) {
       alert("Todos los campos son obligatorios");
       return;
     }
     const password = generatePassword();
     try {
-      const cred = await createUserWithEmailAndPassword(
-        secondaryAuth,
-        formData.email,
-        password
-      );
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, formData.email, password);
       const uid = cred.user.uid;
       await setDoc(doc(firestore, "users", uid), {
         uid,
@@ -282,7 +227,6 @@ export default function TeacherView() {
       alert("Todos los campos obligatorios deben estar llenos.");
       return;
     }
-
     try {
       const formattedExamples = exerciseData.examples.map((ex, idx) => ({
         id: idx + 1,
@@ -290,12 +234,10 @@ export default function TeacherView() {
         outputText: ex.output,
         explanation: ex.explanation,
       }));
-
       const formattedTestCases = exerciseData.testCases.map((tc) => ({
         input: tc.input,
         output: tc.output,
       }));
-
       const exerciseFinal = {
         id: exerciseData.id,
         title: `${exerciseData.order}. ${exerciseData.title}`,
@@ -313,25 +255,18 @@ export default function TeacherView() {
       };
       const exerciseRef = doc(firestore, "problems", exerciseData.id);
       await setDoc(exerciseRef, exerciseFinal);
-
       const courseSnap = await getDocs(collection(firestore, "courses"));
       if (courseSnap.empty) {
         alert("No existe documento de curso en Firestore");
         return;
       }
-
       const courseDoc = courseSnap.docs[0];
       const courseRef = courseDoc.ref;
       const courseData = courseDoc.data();
-
       const daysObj = (courseData.days as Record<string, { day: number; problems: string[] }>) || {};
-
       const daysArr: { day: number; problems: string[] }[] = Object.values(daysObj);
-
       daysArr.sort((a, b) => a.day - b.day);
-
       const existingIndex = daysArr.findIndex((d) => d.day === targetDay);
-
       if (existingIndex >= 0) {
         const problemasDeEseDia = daysArr[existingIndex].problems;
         if (!problemasDeEseDia.includes(exerciseData.id)) {
@@ -344,7 +279,6 @@ export default function TeacherView() {
         });
       }
       daysArr.sort((a, b) => a.day - b.day);
-
       const updatedDaysObj: Record<string, { day: number; problems: string[] }> = {};
       daysArr.forEach((d, idx) => {
         updatedDaysObj[idx] = {
@@ -352,9 +286,7 @@ export default function TeacherView() {
           problems: d.problems,
         };
       });
-
       await updateDoc(courseRef, { days: updatedDaysObj });
-
       setExerciseData({
         id: "",
         title: "",
@@ -383,16 +315,10 @@ export default function TeacherView() {
 
   return (
     <div className="flex h-screen bg-[#1e1e1e] text-white">
-      {/* ====================== */}
-      {/*     Topbar Global      */}
-      {/* ====================== */}
       <Sidebar />
       <div className="flex-1 flex flex-col">
         <Topbar />
         <main className="flex-1 p-6 overflow-auto space-y-6">
-          {/* ====================== */}
-          {/*   CARD DE FILTROS      */}
-          {/* ====================== */}
           <div className="bg-[#2a2a2a] border border-gray-700 rounded-lg">
             <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
               <h2 className="text-lg font-semibold">Filtros</h2>
@@ -411,24 +337,13 @@ export default function TeacherView() {
                 )}
               </button>
             </div>
-
             {filtersOpen && (
               <div className="p-4 space-y-4">
-                <MetricsFilter
-                  selectedMetric={selectedMetric}
-                  onToggle={toggleMetric}
-                />
+                <MetricsFilter selectedMetric={selectedMetric} onToggle={toggleMetric} />
               </div>
             )}
           </div>
-
-          {/* ====================== */}
-          {/*  CARD DE TABLA        */}
-          {/* ====================== */}
           <div className="bg-[#2a2a2a] border border-gray-700 rounded-lg p-4 overflow-auto space-y-6">
-            {/* ====================== */}
-            {/*  Barra de búsqueda + Botones  */}
-            {/* ====================== */}
             <div className="flex items-center justify-between">
               <input
                 type="text"
@@ -465,15 +380,8 @@ export default function TeacherView() {
                 )}
               </div>
             </div>
-
-            {/* ======================================================= */}
-            {/*   Si no hay métrica activa → mostrar TABLA por Días     */}
-            {/* ======================================================= */}
             {selectedMetric === null && (
               <>
-                {/* ======================================================= */}
-                {/*   Tabla de progreso por días (para estudiantes)      */}
-                {/* ======================================================= */}
                 {(!isAdmin || adminView === "students") && (
                   <div className="overflow-auto">
                     <table className="min-w-full border-collapse">
@@ -483,10 +391,7 @@ export default function TeacherView() {
                             Nombre
                           </th>
                           {filteredByName[0]?.progress.map((_, i) => (
-                            <th
-                              key={i}
-                              className="p-2 border border-gray-700 text-center"
-                            >
+                            <th key={i} className="p-2 border border-gray-700 text-center">
                               D{i + 1}
                             </th>
                           ))}
@@ -497,9 +402,7 @@ export default function TeacherView() {
                           <tr
                             key={s.id}
                             className={`${
-                              rowIndex % 2 === 0
-                                ? "bg-[#2a2a2a]"
-                                : "bg-[#252525]"
+                              rowIndex % 2 === 0 ? "bg-[#2a2a2a]" : "bg-[#252525]"
                             } hover:bg-[#333333] cursor-pointer`}
                             onClick={() => setSelectedStudent(s)}
                           >
@@ -507,10 +410,7 @@ export default function TeacherView() {
                               {s.name}
                             </td>
                             {s.progress.map((v, j) => (
-                              <td
-                                key={j}
-                                className="p-2 border border-gray-700 text-center"
-                              >
+                              <td key={j} className="p-2 border border-gray-700 text-center">
                                 {v === "✓" ? (
                                   <FaCheck className="text-green-400 inline" />
                                 ) : v === "X" ? (
@@ -527,9 +427,7 @@ export default function TeacherView() {
                         {filteredByName.length === 0 && (
                           <tr>
                             <td
-                              colSpan={
-                                (filteredByName[0]?.progress.length || 0) + 1
-                              }
+                              colSpan={(filteredByName[0]?.progress.length || 0) + 1}
                               className="p-4 text-center text-gray-500"
                             >
                               No hay usuarios que coincidan.
@@ -540,10 +438,6 @@ export default function TeacherView() {
                     </table>
                   </div>
                 )}
-
-                {/* ======================================================= */}
-                {/*   Agrupación por profesores (para admins)      */}
-                {/* ======================================================= */}
                 {isAdmin && adminView === "teachers" && (
                   <div className="space-y-4">
                     {Object.entries(byTeacher).map(([tid, group]) => {
@@ -551,18 +445,13 @@ export default function TeacherView() {
                         s.name.toLowerCase().includes(searchText.toLowerCase().trim())
                       );
                       return (
-                        <div
-                          key={tid}
-                          className="border border-gray-700 rounded-lg overflow-hidden"
-                        >
+                        <div key={tid} className="border border-gray-700 rounded-lg overflow-hidden">
                           <div
                             className="p-3 bg-[#1e1e1e] cursor-pointer flex justify-between items-center"
                             onClick={() => toggleTeacher(tid)}
                           >
                             <span>Profesor: {tid}</span>
-                            <span>
-                              {expandedTeachers.includes(tid) ? "▾" : "▸"}
-                            </span>
+                            <span>{expandedTeachers.includes(tid) ? "▾" : "▸"}</span>
                           </div>
                           {expandedTeachers.includes(tid) && (
                             <div className="p-2 bg-[#2a2a2a]">
@@ -589,19 +478,13 @@ export default function TeacherView() {
                 )}
               </>
             )}
-
-            {/* ======================================================= */}
-            {/*   Si hay métrica activa → mostrar TABLA de métricas     */}
-            {/* ======================================================= */}
             {selectedMetric === "completion" && (
               <div>
                 <table className="min-w-full border-collapse">
                   <thead>
                     <tr className="bg-[#1e1e1e]">
                       <th className="p-2 border border-gray-700">Nombre</th>
-                      <th className="p-2 border border-gray-700 text-center">
-                        % Completos
-                      </th>
+                      <th className="p-2 border border-gray-700 text-center">% Completos</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -614,17 +497,12 @@ export default function TeacherView() {
                         onClick={() => setSelectedStudent(s)}
                       >
                         <td className="p-2 border border-gray-700">{s.name}</td>
-                        <td className="p-2 border border-gray-700 text-center">
-                          {s.percentComplete}%
-                        </td>
+                        <td className="p-2 border border-gray-700 text-center">{s.percentComplete}%</td>
                       </tr>
                     ))}
                     {filteredByName.length === 0 && (
                       <tr>
-                        <td
-                          colSpan={2}
-                          className="p-4 text-center text-gray-500"
-                        >
+                        <td colSpan={2} className="p-4 text-center text-gray-500">
                           No hay usuarios que coincidan.
                         </td>
                       </tr>
@@ -633,16 +511,13 @@ export default function TeacherView() {
                 </table>
               </div>
             )}
-
             {selectedMetric === "attempts" && (
               <div>
                 <table className="min-w-full border-collapse">
                   <thead>
                     <tr className="bg-[#1e1e1e]">
                       <th className="p-2 border border-gray-700">Nombre</th>
-                      <th className="p-2 border border-gray-700 text-center">
-                        Intentos Promedio
-                      </th>
+                      <th className="p-2 border border-gray-700 text-center">Intentos Promedio</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -655,17 +530,12 @@ export default function TeacherView() {
                         onClick={() => setSelectedStudent(s)}
                       >
                         <td className="p-2 border border-gray-700">{s.name}</td>
-                        <td className="p-2 border border-gray-700 text-center">
-                          {s.attemptsAvg.toFixed(2)}
-                        </td>
+                        <td className="p-2 border border-gray-700 text-center">{s.attemptsAvg.toFixed(2)}</td>
                       </tr>
                     ))}
                     {filteredByName.length === 0 && (
                       <tr>
-                        <td
-                          colSpan={2}
-                          className="p-4 text-center text-gray-500"
-                        >
+                        <td colSpan={2} className="p-4 text-center text-gray-500">
                           No hay usuarios que coincidan.
                         </td>
                       </tr>
@@ -674,16 +544,13 @@ export default function TeacherView() {
                 </table>
               </div>
             )}
-
             {selectedMetric === "time" && (
               <div>
                 <table className="min-w-full border-collapse">
                   <thead>
                     <tr className="bg-[#1e1e1e]">
                       <th className="p-2 border border-gray-700">Nombre</th>
-                      <th className="p-2 border border-gray-700 text-center">
-                        Tiempo Promedio (s)
-                      </th>
+                      <th className="p-2 border border-gray-700 text-center">Tiempo Promedio (s)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -696,17 +563,12 @@ export default function TeacherView() {
                         onClick={() => setSelectedStudent(s)}
                       >
                         <td className="p-2 border border-gray-700">{s.name}</td>
-                        <td className="p-2 border border-gray-700 text-center">
-                          {s.timeAvg.toFixed(2)}
-                        </td>
+                        <td className="p-2 border border-gray-700 text-center">{s.timeAvg.toFixed(2)}</td>
                       </tr>
                     ))}
                     {filteredByName.length === 0 && (
                       <tr>
-                        <td
-                          colSpan={2}
-                          className="p-4 text-center text-gray-500"
-                        >
+                        <td colSpan={2} className="p-4 text-center text-gray-500">
                           No hay usuarios que coincidan.
                         </td>
                       </tr>
@@ -715,12 +577,9 @@ export default function TeacherView() {
                 </table>
               </div>
             )}
-
             {selectedMetric === "points" && (
               <div className="w-full">
-                <h3 className="text-lg font-semibold mb-4 text-white">
-                  Ranking por Puntos
-                </h3>
+                <h3 className="text-lg font-semibold mb-4 text-white">Ranking por Puntos</h3>
                 <StudentRankingChart
                   data={filteredByName.map((s) => ({
                     name: s.name,
@@ -729,18 +588,12 @@ export default function TeacherView() {
                 />
               </div>
             )}
-
-            {/* ======================================================= */}
-            {/*   Dropdown para agrupar (solo admins) – abajo de la tabla */}
-            {/* ======================================================= */}
             {isAdmin && (
               <div className="mt-4 flex items-center">
                 <label className="mr-2 font-medium">Ver:</label>
                 <select
                   value={adminView}
-                  onChange={(e) =>
-                    setAdminView(e.target.value as AdminView)
-                  }
+                  onChange={(e) => setAdminView(e.target.value as AdminView)}
                   className="p-2 rounded bg-[#1e1e1e] border border-gray-600 text-white focus:outline-none"
                 >
                   <option value="students">Por estudiantes</option>
@@ -749,10 +602,6 @@ export default function TeacherView() {
               </div>
             )}
           </div>
-
-          {/* ====================== */}
-          {/*    Drawer de detalles  */}
-          {/* ====================== */}
           {selectedStudent && (
             <div className="fixed inset-y-0 right-0 w-80 bg-[#2a2a2a] border-l border-gray-700 p-4 overflow-auto">
               <StudentDrawer
@@ -764,15 +613,10 @@ export default function TeacherView() {
               />
             </div>
           )}
-
-          {/* ====================== */}
-          {/*    Modal de registro   */}
-          {/* ====================== */}
           {showModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
               <div className="bg-white rounded-lg text-black p-6 w-96 space-y-4">
                 <h2 className="text-lg font-bold mb-4">Registrar Usuario</h2>
-
                 <input
                   ref={nameInputRef}
                   type="text"
@@ -783,7 +627,6 @@ export default function TeacherView() {
                     setFormData({ ...formData, name: e.target.value })
                   }
                 />
-
                 <input
                   type="email"
                   placeholder="Correo electrónico"
@@ -793,7 +636,6 @@ export default function TeacherView() {
                     setFormData({ ...formData, email: e.target.value })
                   }
                 />
-
                 <input
                   type="text"
                   placeholder="Cédula"
@@ -803,7 +645,6 @@ export default function TeacherView() {
                     setFormData({ ...formData, documentId: e.target.value })
                   }
                 />
-
                 {isAdmin && (
                   <select
                     className="w-full p-2 border border-gray-400 rounded"
@@ -811,10 +652,7 @@ export default function TeacherView() {
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        role: e.target.value as
-                          | "estudiante"
-                          | "profesor"
-                          | "admin",
+                        role: e.target.value as "estudiante" | "profesor" | "admin",
                       })
                     }
                   >
@@ -823,16 +661,13 @@ export default function TeacherView() {
                     <option value="admin">Admin</option>
                   </select>
                 )}
-
                 {registrationSuccess && generatedPassword && (
                   <div className="bg-green-100 text-green-800 p-3 rounded text-sm space-y-2">
                     <div className="font-bold">¡Usuario registrado! Datos:</div>
                     <div className="flex items-center justify-between">
                       <span className="font-mono">{formData.email}</span>
                       <button
-                        onClick={() =>
-                          navigator.clipboard.writeText(formData.email)
-                        }
+                        onClick={() => navigator.clipboard.writeText(formData.email)}
                         title="Copiar correo"
                       >
                         <FaCopy className="ml-2 cursor-pointer hover:text-green-700" />
@@ -841,9 +676,7 @@ export default function TeacherView() {
                     <div className="flex items-center justify-between">
                       <span className="font-mono">{generatedPassword}</span>
                       <button
-                        onClick={() =>
-                          navigator.clipboard.writeText(generatedPassword!)
-                        }
+                        onClick={() => navigator.clipboard.writeText(generatedPassword!)}
                         title="Copiar contraseña"
                       >
                         <FaCopy className="ml-2 cursor-pointer hover:text-green-700" />
@@ -851,7 +684,6 @@ export default function TeacherView() {
                     </div>
                   </div>
                 )}
-
                 <div className="flex justify-end gap-2 mt-4">
                   <button
                     onClick={() => setShowModal(false)}
@@ -869,29 +701,14 @@ export default function TeacherView() {
               </div>
             </div>
           )}
-
-          {/* ====================== */}
-          {/*  Modal de Carga Masiva  */}
-          {/* ====================== */}
           {showBulkModal && user && (
-            <BulkRegisterModal
-              onClose={() => setShowBulkModal(false)}
-              currentTeacherUid={user.uid}
-            />
+            <BulkRegisterModal onClose={() => setShowBulkModal(false)} currentTeacherUid={user.uid} />
           )}
-
-          {/* ====================== */}
-          {/*  Modal: Registrar Ejercicio   */}
-          {/* ====================== */}
           {showExerciseModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
               <div className="bg-white rounded-lg text-black p-6 w-[600px] space-y-4 max-h-[90vh] overflow-auto">
                 <h2 className="text-lg font-bold mb-4">Registrar Ejercicio</h2>
-
                 <div className="space-y-4">
-                  {/* ------------------------------- */}
-                  {/* ----- Campos Generales ------ */}
-                  {/* ------------------------------- */}
                   <div className="space-y-2">
                     <label className="font-semibold">ID del ejercicio</label>
                     <input
@@ -903,7 +720,6 @@ export default function TeacherView() {
                         setExerciseData({ ...exerciseData, id: e.target.value })
                       }
                     />
-
                     <label className="font-semibold">Título</label>
                     <input
                       type="text"
@@ -911,13 +727,9 @@ export default function TeacherView() {
                       required
                       value={exerciseData.title}
                       onChange={(e) =>
-                        setExerciseData({
-                          ...exerciseData,
-                          title: e.target.value,
-                        })
+                        setExerciseData({ ...exerciseData, title: e.target.value })
                       }
                     />
-
                     <label className="font-semibold">Enunciado del problema</label>
                     <textarea
                       className="w-full p-2 border"
@@ -925,80 +737,54 @@ export default function TeacherView() {
                       required
                       value={exerciseData.problemStatement}
                       onChange={(e) =>
-                        setExerciseData({
-                          ...exerciseData,
-                          problemStatement: e.target.value,
-                        })
+                        setExerciseData({ ...exerciseData, problemStatement: e.target.value })
                       }
                     />
-
-                    <label className="font-semibold">
-                      Respuesta esperada (outputText)
-                    </label>
+                    <label className="font-semibold">Respuesta esperada (outputText)</label>
                     <textarea
                       className="w-full p-2 border"
                       rows={2}
                       required
                       value={exerciseData.outputText}
                       onChange={(e) =>
-                        setExerciseData({
-                          ...exerciseData,
-                          outputText: e.target.value,
-                        })
+                        setExerciseData({ ...exerciseData, outputText: e.target.value })
                       }
                     />
-
                     <label className="font-semibold">Código base</label>
                     <textarea
                       className="w-full p-2 border"
                       rows={3}
                       value={exerciseData.starterCode}
                       onChange={(e) =>
-                        setExerciseData({
-                          ...exerciseData,
-                          starterCode: e.target.value,
-                        })
+                        setExerciseData({ ...exerciseData, starterCode: e.target.value })
                       }
                     />
-
                     <label className="font-semibold">Nombre de la función</label>
                     <input
                       type="text"
                       className="w-full p-2 border"
                       value={exerciseData.starterFunctionName}
                       onChange={(e) =>
-                        setExerciseData({
-                          ...exerciseData,
-                          starterFunctionName: e.target.value,
-                        })
+                        setExerciseData({ ...exerciseData, starterFunctionName: e.target.value })
                       }
                     />
-
                     <label className="font-semibold">Restricciones (HTML)</label>
                     <textarea
                       className="w-full p-2 border"
                       rows={2}
                       value={exerciseData.constraints}
                       onChange={(e) =>
-                        setExerciseData({
-                          ...exerciseData,
-                          constraints: e.target.value,
-                        })
+                        setExerciseData({ ...exerciseData, constraints: e.target.value })
                       }
                     />
-
                     <div className="flex gap-4">
-                      {/* -- Selector de Dificultad -- */}
                       <div className="flex-1">
                         <label className="font-semibold">Dificultad</label>
                         <select
                           className="w-full p-2 border"
                           value={exerciseData.difficulty}
                           onChange={(e) =>
-                            setExerciseData({
-                              ...exerciseData,
-                              difficulty: e.target.value,
-                            })
+                            setExerciseData({ ...exerciseData, difficulty: e.target.value })
                           }
                         >
                           <option value="Easy">Easy</option>
@@ -1006,8 +792,6 @@ export default function TeacherView() {
                           <option value="Hard">Hard</option>
                         </select>
                       </div>
-
-                      {/* -- Selector de Categoría (libre) -- */}
                       <div className="flex-1">
                         <label className="font-semibold">Categoría</label>
                         <input
@@ -1015,16 +799,11 @@ export default function TeacherView() {
                           className="w-full p-2 border"
                           value={exerciseData.category}
                           onChange={(e) =>
-                            setExerciseData({
-                              ...exerciseData,
-                              category: e.target.value,
-                            })
+                            setExerciseData({ ...exerciseData, category: e.target.value })
                           }
                         />
                       </div>
                     </div>
-
-                    {/* -- Selector de Día 1 a 21 -- */}
                     <label className="font-semibold">Día al que pertenece</label>
                     <select
                       className="w-full p-2 border"
@@ -1038,17 +817,10 @@ export default function TeacherView() {
                       ))}
                     </select>
                   </div>
-
-                  {/* ------------------------------- */}
-                  {/* ------ Sección de Examples ------ */}
-                  {/* ------------------------------- */}
                   <div className="space-y-3">
                     <label className="font-semibold">Examples (con explicación)</label>
                     {exerciseData.examples.map((ex, index) => (
-                      <div
-                        key={index}
-                        className="border p-3 rounded space-y-2 bg-gray-50"
-                      >
+                      <div key={index} className="border p-3 rounded space-y-2 bg-gray-50">
                         <div className="flex justify-between items-center">
                           <h4 className="font-semibold">Example #{index + 1}</h4>
                           {exerciseData.examples.length > 1 && (
@@ -1057,17 +829,13 @@ export default function TeacherView() {
                               onClick={() => {
                                 const updated = [...exerciseData.examples];
                                 updated.splice(index, 1);
-                                setExerciseData({
-                                  ...exerciseData,
-                                  examples: updated,
-                                });
+                                setExerciseData({ ...exerciseData, examples: updated });
                               }}
                             >
                               Eliminar
                             </button>
                           )}
                         </div>
-
                         <div>
                           <label className="text-sm">Input</label>
                           <input
@@ -1080,12 +848,11 @@ export default function TeacherView() {
                               setExerciseData({
                                 ...exerciseData,
                                 examples: updated,
-                                inputText: updated[0].input, // Mantener inputText del primer example
+                                inputText: updated[0].input,
                               });
                             }}
                           />
                         </div>
-
                         <div>
                           <label className="text-sm">Output</label>
                           <input
@@ -1095,14 +862,10 @@ export default function TeacherView() {
                             onChange={(e) => {
                               const updated = [...exerciseData.examples];
                               updated[index].output = e.target.value;
-                              setExerciseData({
-                                ...exerciseData,
-                                examples: updated,
-                              });
+                              setExerciseData({ ...exerciseData, examples: updated });
                             }}
                           />
                         </div>
-
                         <div>
                           <label className="text-sm">Explicación</label>
                           <textarea
@@ -1112,26 +875,19 @@ export default function TeacherView() {
                             onChange={(e) => {
                               const updated = [...exerciseData.examples];
                               updated[index].explanation = e.target.value;
-                              setExerciseData({
-                                ...exerciseData,
-                                examples: updated,
-                              });
+                              setExerciseData({ ...exerciseData, examples: updated });
                             }}
                           />
                         </div>
                       </div>
                     ))}
-
                     <div className="flex justify-end">
                       <button
                         className="px-3 py-1 mt-2 bg-black text-white rounded"
                         onClick={() =>
                           setExerciseData({
                             ...exerciseData,
-                            examples: [
-                              ...exerciseData.examples,
-                              { input: "", output: "", explanation: "" },
-                            ],
+                            examples: [...exerciseData.examples, { input: "", output: "", explanation: "" }],
                           })
                         }
                       >
@@ -1139,17 +895,10 @@ export default function TeacherView() {
                       </button>
                     </div>
                   </div>
-
-                  {/* ------------------------------- */}
-                  {/* ----- Sección de Test Cases ----- */}
-                  {/* ------------------------------- */}
                   <div className="space-y-3">
                     <label className="font-semibold">Test Cases (solo input/output)</label>
                     {exerciseData.testCases.map((tc, idx) => (
-                      <div
-                        key={idx}
-                        className="border p-3 rounded space-y-2 bg-gray-50"
-                      >
+                      <div key={idx} className="border p-3 rounded space-y-2 bg-gray-50">
                         <div className="flex justify-between items-center">
                           <h4 className="font-semibold">Test Case #{idx + 1}</h4>
                           {exerciseData.testCases.length > 1 && (
@@ -1158,17 +907,13 @@ export default function TeacherView() {
                               onClick={() => {
                                 const updated = [...exerciseData.testCases];
                                 updated.splice(idx, 1);
-                                setExerciseData({
-                                  ...exerciseData,
-                                  testCases: updated,
-                                });
+                                setExerciseData({ ...exerciseData, testCases: updated });
                               }}
                             >
                               Eliminar
                             </button>
                           )}
                         </div>
-
                         <div>
                           <label className="text-sm">Input</label>
                           <input
@@ -1178,14 +923,10 @@ export default function TeacherView() {
                             onChange={(e) => {
                               const updated = [...exerciseData.testCases];
                               updated[idx].input = e.target.value;
-                              setExerciseData({
-                                ...exerciseData,
-                                testCases: updated,
-                              });
+                              setExerciseData({ ...exerciseData, testCases: updated });
                             }}
                           />
                         </div>
-
                         <div>
                           <label className="text-sm">Output</label>
                           <input
@@ -1195,26 +936,19 @@ export default function TeacherView() {
                             onChange={(e) => {
                               const updated = [...exerciseData.testCases];
                               updated[idx].output = e.target.value;
-                              setExerciseData({
-                                ...exerciseData,
-                                testCases: updated,
-                              });
+                              setExerciseData({ ...exerciseData, testCases: updated });
                             }}
                           />
                         </div>
                       </div>
                     ))}
-
                     <div className="flex justify-end">
                       <button
                         className="px-3 py-1 mt-2 bg-black text-white rounded"
                         onClick={() =>
                           setExerciseData({
                             ...exerciseData,
-                            testCases: [
-                              ...exerciseData.testCases,
-                              { input: "", output: "" },
-                            ],
+                            testCases: [...exerciseData.testCases, { input: "", output: "" }],
                           })
                         }
                       >
@@ -1223,10 +957,6 @@ export default function TeacherView() {
                     </div>
                   </div>
                 </div>
-
-                {/* ------------------------------- */}
-                {/* ---- Botones de acción modal -- */}
-                {/* ------------------------------- */}
                 <div className="flex justify-end gap-2 mt-4">
                   <button
                     onClick={() => setShowExerciseModal(false)}

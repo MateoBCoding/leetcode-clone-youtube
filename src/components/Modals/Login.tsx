@@ -83,12 +83,6 @@ const Login: React.FC<LoginProps> = () => {
 					Forgot Password?
 				</a>
 			</button>
-			<div className='text-sm font-medium text-gray-300'>
-				Not Registered?{" "}
-				<a href='#' className='text-blue-700 hover:underline' onClick={() => handleClick("register")}>
-					Create account
-				</a>
-			</div>
 		</form>
 	);
 };

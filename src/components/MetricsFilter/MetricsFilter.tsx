@@ -15,7 +15,7 @@ const MetricsFilter: React.FC<MetricsFilterProps> = ({ selectedMetric, onToggle 
       }`}
       onClick={() => onToggle('completion')}
     >
-      📊 % completos
+      % completos
     </button>
     <button
       className={`border p-4 text-center font-medium ${
@@ -23,7 +23,7 @@ const MetricsFilter: React.FC<MetricsFilterProps> = ({ selectedMetric, onToggle 
       }`}
       onClick={() => onToggle('attempts')}
     >
-      🔁 Intentos
+      Intentos
     </button>
     <button
       className={`border p-4 text-center font-medium ${
@@ -31,7 +31,7 @@ const MetricsFilter: React.FC<MetricsFilterProps> = ({ selectedMetric, onToggle 
       }`}
       onClick={() => onToggle('time')}
     >
-      ⏱ Tiempo
+      Tiempo
     </button>
 
      <button
