@@ -160,7 +160,7 @@ const Sidebar: React.FC = () => {
 
 
       <div className="mt-auto mb-4 text-xs text-gray-400">
-        {sidebarOpen ? "© MiApp 2025" : ""}
+        {sidebarOpen ? "© Por Mateo Betancur & Juan Pablo Aguirre - 2025" : ""}
       </div>
     </div>
   );
