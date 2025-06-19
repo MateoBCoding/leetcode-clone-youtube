@@ -21,6 +21,8 @@ import {
   collection,
   getDocs,
 } from "firebase/firestore";
+import { toast } from "react-toastify";
+
 
 type ItemsMap = Record<string, string[]>;
 
@@ -152,10 +154,18 @@ const CourseEditor: React.FC = () => {
 
       const courseRef = doc(firestore, "courses", courseId);
       await updateDoc(courseRef, { days: daysMap });
-      alert("✅ Cambios guardados correctamente");
+      toast.success("✅ Cambios guardados correctamente", {
+                      position: "top-center",
+                      autoClose: 3000,
+                      theme: "dark",
+            });
     } catch (error) {
+      toast.error("❌ Hubo un error al guardar cambios.", {
+                      position: "top-center",
+                      autoClose: 3000,
+                      theme: "dark",
+            });
       console.error("🛑 Error al guardar cambios:", error);
-      alert("❌ Hubo un error al guardar cambios.");
     }
   };
 

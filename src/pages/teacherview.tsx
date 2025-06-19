@@ -12,6 +12,8 @@ import { StudentDrawer } from "../components/StudentDrawer/studentdrawer";
 import { BulkRegisterModal } from "@/components/BulkRegisterModal/BulkRegisterModal";
 import { firestore, auth, firebaseConfig } from "@/firebase/firebase";
 import StudentRankingChart from "@/components/TeacherView/StudentRankingChart";
+import { toast } from "react-toastify";
+
 
 export type AdminView = "students" | "teachers";
 
@@ -306,10 +308,18 @@ export default function TeacherView() {
       });
       setTargetDay(1);
       setShowExerciseModal(false);
-      alert("Ejercicio registrado exitosamente");
+      toast.success("Ejercicio Registrado con exito", {
+                position: "top-center",
+                autoClose: 3000,
+                theme: "dark",
+      });
     } catch (error) {
       console.error("Error al registrar ejercicio:", error);
-      alert("Hubo un error al registrar el ejercicio.");
+       toast.error("Error al registrar ejercicio", {
+                position: "top-center",
+                autoClose: 3000,
+                theme: "dark",
+      });
     }
   };
 
