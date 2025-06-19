@@ -1,11 +1,10 @@
-// Aquí puedes guardarlo como un componente separado, por ejemplo en src/components/DayColumn.tsx
 import React from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,
   rectSortingStrategy,
 } from "@dnd-kit/sortable";
-import SortableItem from "@/components/SortableItem"; // Asumiremos que SortableItem ya está definido
+import SortableItem from "@/components/SortableItem";
 
 interface DayColumnProps {
   containerId: string;
@@ -18,7 +17,6 @@ const DayColumn: React.FC<DayColumnProps> = ({
   dayNumber,
   problemasDelDia,
 }) => {
-  // ── useDroppable se llama siempre en el mismo orden, para cada DayColumn.
   const { setNodeRef: setDroppableRef } = useDroppable({
     id: containerId,
     data: { containerId },
@@ -34,7 +32,6 @@ const DayColumn: React.FC<DayColumnProps> = ({
         <h3 className="font-semibold text-lg text-white">
           Día {dayNumber}
         </h3>
-        {/* Aquí podrías añadir un botón de “Eliminar día” */}
       </div>
 
       <div

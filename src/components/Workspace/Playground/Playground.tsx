@@ -3,7 +3,7 @@ import PreferenceNav from "./PreferenceNav/PreferenceNav";
 import Split from "react-split";
 import CodeMirror from "@uiw/react-codemirror";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
-import { javascript } from "@codemirror/lang-javascript";
+import { python } from "@codemirror/lang-python"; 
 import EditorFooter from "./EditorFooter";
 import { Problem } from "@/utils/types/problem";
 import { useAuthState } from "react-firebase-hooks/auth";
@@ -13,9 +13,15 @@ import { useRouter } from "next/router";
 import useLocalStorage from "@/hooks/useLocalStorage";
 import { runJudge0Code } from "@/utils/Runner/judge0Runner";
 import { CheckCircle, XCircle } from "lucide-react";
-import { doc, getDoc, setDoc, updateDoc, increment, arrayUnion } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  increment,
+  arrayUnion,
+} from "firebase/firestore";
 import { calculatePoints } from "@/utils/calculatePoints";
-
 
 type PlaygroundProps = {
   problem: Problem;
@@ -50,10 +56,30 @@ const Playground: React.FC<PlaygroundProps> = ({
     query: { pid },
   } = useRouter();
 
-  
+  const rawTestCases = problem.testCases;
+  const testCases: Array<{ input: string; output: string }> = Array.isArray(
+    rawTestCases
+  )
+    ? rawTestCases
+    : Object.values(rawTestCases || {});
+
   const [testCaseResults, setTestCaseResults] = useState<
     Array<"success" | "error" | null>
-  >(new Array(problem.examples.length).fill(null));
+  >(new Array(testCases.length).fill(null));
+
+ function generateVarDeclarations(inputText: string): string {
+  const regex = /([a-zA-Z_]\w*)\s*=\s*(\[[^\]]*\]|\d+)/g;
+  let match;
+  const lines: string[] = [];
+
+  while ((match = regex.exec(inputText)) !== null) {
+    const varName = match[1]; 
+    const varValue = match[2]; 
+    lines.push(`${varName} = ${varValue}`);
+  }
+
+  return lines.join("\n");
+}
 
   const handleSubmit = async () => {
     if (!user) {
@@ -66,37 +92,56 @@ const Playground: React.FC<PlaygroundProps> = ({
     }
 
     try {
-      const testCases = problem.testCases.map((ex) => ({
-        input: extractStdin(ex.input),
-        output: ex.output.trim(),
-      }));
-
-      const results = await runJudge0Code(userCode, 63, testCases);
-
+      const newStatus: Array<"success" | "error"> = [];
       let allPassed = true;
       let outputMsg = "";
-      const newStatus: Array<"success" | "error"> = [];
 
-      results.forEach((res, i) => {
-        const expected = testCases[i].output;
+      for (let i = 0; i < testCases.length; i++) {
+        const ex = testCases[i];
+
+        const varDecl = generateVarDeclarations(ex.input.trim());
+
+        const combinedCode = `${varDecl}\n\n${userCode}`;
+        const singlePayload = [
+          {
+            input: "", 
+            output: ex.output.trim(),
+          },
+        ];
+        const results = await runJudge0Code(combinedCode, 92, singlePayload);
+        const res = results[0];
+
+        const expected = ex.output.trim();
         const actual = res.decoded.stdout.trim();
-        const passed = expected === actual && res.status.description === "Accepted";
+        const passed =
+          expected === actual && res.status.description === "Accepted";
 
         newStatus.push(passed ? "success" : "error");
         if (!passed) allPassed = false;
 
-        outputMsg += `\nTest Case ${i + 1}:\nExpected: ${expected}\nReceived: ${actual}\nStatus: ${res.status.description}\n---\n`;
-      });
+        outputMsg += `
+Test Case ${i + 1}:
+Expected: ${expected}
+Received: ${actual}
+Status: ${res.status.description}
+---
+`;
+      }
 
+      // Actualizamos estado de resultados y consola
       setTestCaseResults(newStatus);
       setConsoleOutput(outputMsg);
 
+      // ── Si TODOS los tests pasaron, guardamos estadísticas en Firestore ─────────
+      const statId = `${user.uid}_${pid}`;
+      const statRef = doc(firestore, "user_problem_stats", statId);
+
       if (allPassed) {
         const submissionTime = Date.now();
-        const durationInSeconds = Math.floor((submissionTime - entryTime) / 1000);
+        const durationInSeconds = Math.floor(
+          (submissionTime - entryTime) / 1000
+        );
 
-        const statId = `${user.uid}_${pid}`;
-        const statRef = doc(firestore, "user_problem_stats", statId);
         const statSnap = await getDoc(statRef);
         let oldExecutionCount = 0;
         if (statSnap.exists() && statSnap.data()?.executionCount != null) {
@@ -126,21 +171,18 @@ const Playground: React.FC<PlaygroundProps> = ({
         setTimeout(() => {
           router.push("/");
         }, 3200);
-      
       } else {
+        // ── Si algún test falló, actualizamos estadísticas parciales ───────────────
         toast.error("❌ Some test cases failed", {
           position: "top-center",
           autoClose: 3000,
           theme: "dark",
         });
         setSuccess(false);
-        const statId = `${user.uid}_${pid}`;
-        const statRef = doc(firestore, "user_problem_stats", statId);
-
         await updateDoc(statRef, {
           executionCount: increment(1),
           success: false,
-          lastSubmittedAt: Date.now()
+          lastSubmittedAt: Date.now(),
         });
       }
     } catch (err: any) {
@@ -151,8 +193,9 @@ const Playground: React.FC<PlaygroundProps> = ({
         theme: "dark",
       });
     }
-    };
+  };
 
+  // ──────────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     const code = localStorage.getItem(`code-${pid}`);
     if (user) {
@@ -161,11 +204,6 @@ const Playground: React.FC<PlaygroundProps> = ({
       setUserCode(problem.starterCode);
     }
   }, [pid, user, problem.starterCode]);
-
-  const onChange = (value: string) => {
-    setUserCode(value);
-    localStorage.setItem(`code-${pid}`, JSON.stringify(value));
-  };
 
   if (user && pid) {
     const statId = `${user.uid}_${pid}`;
@@ -184,8 +222,9 @@ const Playground: React.FC<PlaygroundProps> = ({
           points: 0,
         });
       }
-  });
-}
+    });
+  }
+
   return (
     <div className="flex flex-col bg-dark-layer-1 relative overflow-x-hidden">
       <PreferenceNav settings={settings} setSettings={setSettings} />
@@ -201,8 +240,11 @@ const Playground: React.FC<PlaygroundProps> = ({
           <CodeMirror
             value={userCode}
             theme={vscodeDark}
-            onChange={onChange}
-            extensions={[javascript()]}
+            extensions={[python()]} // Cambiado a Python
+            onChange={(value) => {
+              setUserCode(value);
+              localStorage.setItem(`code-${pid}`, JSON.stringify(value));
+            }}
             style={{ fontSize: settings.fontSize }}
           />
         </div>
@@ -218,25 +260,27 @@ const Playground: React.FC<PlaygroundProps> = ({
             </div>
           </div>
 
-          {/* tabs */}
+          {/* tabs: iteramos sobre testCases normalizados */}
           <div className="flex">
-            {problem.examples.map((ex, idx) => (
+            {testCases.map((ex, idx) => (
               <div
-                key={ex.id}
+                key={`case-${idx}`}
                 className="mr-2 items-start mt-2"
                 onClick={() => setActiveTestCaseId(idx)}
               >
                 <div className="flex flex-wrap items-center gap-y-4">
                   <div
                     className={`font-medium inline-flex items-center gap-1 rounded-lg px-4 py-1 cursor-pointer whitespace-nowrap transition-all
-										${activeTestCaseId === idx ? "text-white" : "text-gray-400"}
-										${
-                      testCaseResults[idx] === "success"
-                        ? "bg-green-600 text-white"
-                        : testCaseResults[idx] === "error"
-                        ? "bg-red-600 text-white"
-                        : "bg-dark-fill-3 hover:bg-dark-fill-2"
-                    }`}
+                      ${
+                        activeTestCaseId === idx ? "text-white" : "text-gray-400"
+                      }
+                      ${
+                        testCaseResults[idx] === "success"
+                          ? "bg-green-600 text-white"
+                          : testCaseResults[idx] === "error"
+                          ? "bg-red-600 text-white"
+                          : "bg-dark-fill-3 hover:bg-dark-fill-2"
+                      }`}
                   >
                     Case {idx + 1}
                     {testCaseResults[idx] === "success" && (
@@ -255,11 +299,12 @@ const Playground: React.FC<PlaygroundProps> = ({
           <div className="font-semibold my-4">
             <p className="text-sm font-medium mt-4 text-white">Input:</p>
             <div className="w-full cursor-text rounded-lg border px-3 py-[10px] bg-dark-fill-3 border-transparent text-white mt-2">
-              {problem.testCases[activeTestCaseId].input}
+              {testCases[activeTestCaseId]?.input ?? ""}
             </div>
+
             <p className="text-sm font-medium mt-4 text-white">Output:</p>
             <div className="w-full cursor-text rounded-lg border px-3 py-[10px] bg-dark-fill-3 border-transparent text-white mt-2">
-              {problem.testCases[activeTestCaseId].output}
+              {testCases[activeTestCaseId]?.output ?? ""}
             </div>
           </div>
         </div>
@@ -271,15 +316,3 @@ const Playground: React.FC<PlaygroundProps> = ({
 };
 
 export default Playground;
-
-/* ─────────── Helpers ─────────── */
-function extractStdin(inputText: string): string {
-  // convierte "nums = [2,7,11,15], target = 9"  ->  "[2,7,11,15]\n9"
-  const numsMatch = inputText.match(/nums\s*=\s*(\[[^\]]+\])/);
-  const targetMatch = inputText.match(/target\s*=\s*([0-9]+)/);
-
-  const nums = numsMatch ? numsMatch[1] : "[]";
-  const target = targetMatch ? targetMatch[1] : "0";
-
-  return `${nums}\n${target}`;
-}

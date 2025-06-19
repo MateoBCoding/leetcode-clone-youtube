@@ -13,7 +13,6 @@ const CourseCard: React.FC<CourseCardProps> = ({
   category,
   onClick,
 }) => {
-  // Definir colores o patrones por categoría si quieres, por ahora algo básico:
   const headerColors: Record<string, string> = {
     Programación: 'bg-blue-500',
     Matemáticas: 'bg-yellow-500',

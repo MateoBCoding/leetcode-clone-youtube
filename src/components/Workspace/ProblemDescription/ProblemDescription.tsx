@@ -195,12 +195,10 @@ const ProblemDescription: React.FC<ProblemDescriptionProps> = ({ problem, _solve
 							</div>
 						)}
 
-						{/* Problem Statement(paragraphs) */}
 						<div className='text-white text-sm'>
 							<div dangerouslySetInnerHTML={{ __html: problem.problemStatement }} />
 						</div>
 
-						{/* Examples */}
 						<div className='mt-4'>
 							{problem.examples.map((example, index) => (
 								<div key={example.id}>
@@ -223,7 +221,6 @@ const ProblemDescription: React.FC<ProblemDescriptionProps> = ({ problem, _solve
 							))}
 						</div>
 
-						{/* Constraints */}
 						<div className='my-8 pb-4'>
 							<div className='text-white text-sm font-medium'>Constraints:</div>
 							<ul className='text-white ml-5 list-disc '>
@@ -244,7 +241,6 @@ function useGetCurrentProblem(problemId: string) {
 	const [problemDifficultyClass, setProblemDifficultyClass] = useState<string>("");
 
 	useEffect(() => {
-		// Get problem from DB
 		const getCurrentProblem = async () => {
 			setLoading(true);
 			const docRef = doc(firestore, "problems", problemId);
@@ -252,7 +248,6 @@ function useGetCurrentProblem(problemId: string) {
 			if (docSnap.exists()) {
 				const problem = docSnap.data();
 				setCurrentProblem({ id: docSnap.id, ...problem } as DBProblem);
-				// easy, medium, hard
 				setProblemDifficultyClass(
 					problem.difficulty === "Easy"
 						? "bg-olive text-olive"
@@ -281,7 +276,7 @@ function useGetUsersDataOnProblem(problemId: string) {
 				const data = userSnap.data();
 				const { solvedProblems, likedProblems, dislikedProblems, starredProblems } = data;
 				setData({
-					liked: likedProblems.includes(problemId), // likedProblems["two-sum","jump-game"]
+					liked: likedProblems.includes(problemId), 
 					disliked: dislikedProblems.includes(problemId),
 					starred: starredProblems.includes(problemId),
 					solved: solvedProblems.includes(problemId),

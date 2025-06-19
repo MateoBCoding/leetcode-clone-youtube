@@ -1,4 +1,3 @@
-// src/components/Sidebar/Sidebar.tsx
 import React, { useState, useEffect } from "react";
 import { FaBars, FaChalkboardTeacher, FaEdit } from "react-icons/fa";
 import { useRouter } from "next/router";
@@ -10,16 +9,13 @@ const Sidebar: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const router = useRouter();
 
-  // 1) Estado y hook de autenticación
   const [user, loadingAuth] = useAuthState(auth);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loadingRole, setLoadingRole] = useState(true);
 
-  // 2) Estado para almacenar el único courseId existente (asumimos que solo hay 1)
   const [courseId, setCourseId] = useState<string>("");
   const [loadingCourse, setLoadingCourse] = useState(true);
 
-  // ─── 3) Obtener rol del usuario (solo si hay user) ─────────────────────────
   useEffect(() => {
     if (loadingAuth) return;
     if (!user) {
@@ -49,18 +45,15 @@ const Sidebar: React.FC = () => {
     fetchUserRole();
   }, [user, loadingAuth]);
 
-  // ─── 4) Obtener el único courseId de la colección “courses” ────────────────
   useEffect(() => {
     const fetchOnlyCourse = async () => {
       try {
         const coursesCollection = collection(firestore, "courses");
         const snapshot = await getDocs(coursesCollection);
         if (snapshot.size === 1) {
-          // Si EXACTAMENTE hay 1 documento, lo tomamos
           const docSnap = snapshot.docs[0];
           setCourseId(docSnap.id);
         } else {
-          // Si hay 0 o >1, dejamos courseId = ""
           setCourseId("");
           console.warn(
             `Se esperaría un solo curso, pero hay ${snapshot.size}.`
@@ -75,15 +68,13 @@ const Sidebar: React.FC = () => {
     };
 
     fetchOnlyCourse();
-  }, []); // Se llama solo una vez al montar
+  }, []);
 
-  // ─── 5) Handler para ir al Editor de Cursos ─────────────────────────────────
   const goToCourseEditor = () => {
     if (!courseId) return;
     router.push(`/courses/${courseId}/edit`);
   };
 
-  // ─── 6) Mientras carga info de auth, rol o courseId, mostrar “Cargando…” ──
   if (loadingAuth || loadingRole || loadingCourse) {
     return (
       <div
@@ -120,7 +111,6 @@ const Sidebar: React.FC = () => {
         ${sidebarOpen ? "w-56" : "w-14"}
       `}
     >
-      {/* ─── Botón para abrir/cerrar Sidebar ─────────────────────────────────── */}
       <button
         className="mt-4 text-white text-2xl"
         onClick={() => setSidebarOpen((prev) => !prev)}
@@ -128,7 +118,6 @@ const Sidebar: React.FC = () => {
         <FaBars />
       </button>
 
-      {/* ─── Botón de “Vista de Profesor” (siempre visible) ──────────────────── */}
       <div className="mt-10 w-full px-4 flex justify-center">
         <button
           onClick={() => router.push("/teacherview")}
@@ -148,7 +137,6 @@ const Sidebar: React.FC = () => {
         </button>
       </div>
 
-      {/* ─── Botón de “Editor de Cursos” (solo si es Admin Y existe courseId) ── */}
       {isAdmin && courseId && (
         <div className="mt-4 w-full px-4 flex justify-center">
           <button
@@ -170,10 +158,9 @@ const Sidebar: React.FC = () => {
         </div>
       )}
 
-      {/* ───── Coloca aquí otros botones que desees mostrar a todos ───────────── */}
 
       <div className="mt-auto mb-4 text-xs text-gray-400">
-        {sidebarOpen ? "© MiApp 2025" : ""}
+        {sidebarOpen ? "© Por Mateo Betancur & Juan Pablo Aguirre - 2025" : ""}
       </div>
     </div>
   );

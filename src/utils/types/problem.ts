@@ -11,7 +11,6 @@ export type testCases = {
 	output: string;
 };
 
-// local problem data
 export type Problem = {
 	id: string;
 	title: string;

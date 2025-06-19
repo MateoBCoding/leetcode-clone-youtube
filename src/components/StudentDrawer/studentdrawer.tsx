@@ -41,7 +41,6 @@ export const StudentDrawer: React.FC<Props> = ({
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // ─── 1) Obtener estadísticas del usuario ─────────────────────────
         const statsRef = collection(firestore, "user_problem_stats");
         const statsQuery = query(statsRef, where("userId", "==", uid));
         const statsSnapshot = await getDocs(statsQuery);
@@ -52,35 +51,25 @@ export const StudentDrawer: React.FC<Props> = ({
           statList.push(data);
         });
 
-        // ─── 2) Obtener el documento del curso y su campo “days” ────────
         const courseSnapshot = await getDocs(
           collection(firestore, "courses")
         );
         const courseDoc = courseSnapshot.docs[0];
         const courseData = courseDoc.data();
-        // Aquí “days” viene como un objeto/map, no como un array:
-        //   { "0": { day: 1, problems: […] }, "1": { day: 2, problems: […] }, … }
+ 
         const daysObj = (courseData.days as Record<string, CourseDay>) || {};
-
-        // ─── 3) Convertir ese objeto a array de valores ────────────────
-        // Object.values(daysObj) devolverá [{ day:1, problems: […] }, { day:2, problems: […] }, …]
         const courseDaysData: CourseDay[] = Object.values(daysObj);
 
-        // (Opcional) Ordenar por la propiedad “day”, aunque no es obligatorio aquí:
-        courseDaysData.sort((a, b) => a.day - b.day);
 
-        // ─── 4) Construir un map: para cada día (day), 
-        //     filtrar statList y asignar solo los stats de ese día ────
+        courseDaysData.sort((a, b) => a.day - b.day);
         const map: Record<number, Stat[]> = {};
         for (const dayObj of courseDaysData) {
-          // Todos los stat cuyo problemId esté en dayObj.problems
           const statsForThisDay = statList.filter((stat) =>
             dayObj.problems.includes(stat.problemId)
           );
           map[dayObj.day] = statsForThisDay;
         }
 
-        // ─── 5) Guardar todo en estado ─────────────────────────────────
         setStats(statList);
         setCourseDays(courseDaysData);
         setDayStatsMap(map);
@@ -96,9 +85,7 @@ export const StudentDrawer: React.FC<Props> = ({
     fetchData();
   }, [uid]);
 
-  // ─── 6) Filtrar los días que se mostrarán (si ‘day’ es nulo, mostrar todos) ─
-  // Por ejemplo, si day === "D2", solo mostrar el día 2; 
-  // de lo contrario, mostrar todos los días
+
   const filteredDays = day
     ? courseDays.filter((d) => `D${d.day}` === day)
     : courseDays;
@@ -120,7 +107,6 @@ export const StudentDrawer: React.FC<Props> = ({
 
       <ul className="text-sm list-disc list-inside space-y-4">
         {filteredDays.map((dayObj) => {
-          // Obtener las stats que correspondan a este día
           const statsForDay = dayStatsMap[dayObj.day] || [];
 
           return (

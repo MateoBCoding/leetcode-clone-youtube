@@ -23,7 +23,6 @@ export default function AdminView() {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [group, setGroup] = useState<Group>('todos');
 
-  // Verificar acceso de admin y redirigir según rol
   useEffect(() => {
     const checkAccess = async () => {
       if (!currentUser) return router.push('/auth');
@@ -38,7 +37,6 @@ export default function AdminView() {
     if (!loadingAuth) checkAccess();
   }, [currentUser, loadingAuth, router]);
 
-  // Cargar todos los usuarios (solo admin)
   useEffect(() => {
     if (role !== 'admin') return;
     const loadUsers = async () => {
@@ -62,7 +60,6 @@ export default function AdminView() {
     loadUsers();
   }, [role]);
 
-  // Filtrar según grupo
   const filtered = users.filter(u => {
     if (group === 'todos') return true;
     if (group === 'estudiantes') return u.role === 'estudiante';
@@ -70,7 +67,6 @@ export default function AdminView() {
     return true;
   });
 
-  // Render admin dashboard
   return (
     <div className="p-6 bg-gray-900 text-white min-h-screen">
       <h1 className="text-2xl font-bold mb-4">Panel de Administración</h1>
